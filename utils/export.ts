@@ -1,5 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { FeedingSession, DiaperLog } from '../types';
 import { formatTime } from './time';
 import { format, parseISO } from 'date-fns';
@@ -14,20 +15,23 @@ const toMMSS = (seconds: number | null | undefined): string => {
 };
 
 /**
- * Generate a clean styled HTML table from feeding sessions (CSV-style data, beautiful look)
+ * Generate a clean styled HTML table from feeding sessions
  */
 export function generateReport(
   sessions: FeedingSession[],
   babyName: string,
   startDate: string,
   endDate: string,
-  diaperLogs: DiaperLog[] = []
+  diaperLogs: DiaperLog[] = [],
+  forPdf = false
 ): string {
   const start = safeParse(startDate);
   const end = safeParse(endDate);
   const dateRange = `${format(start, 'd MMM yyyy')} \u2013 ${format(end, 'd MMM yyyy')}`;
   const exportedAt = format(new Date(), 'dd MMM yyyy, HH:mm');
   const capitalName = babyName.charAt(0).toUpperCase() + babyName.slice(1);
+
+  const cellPad = forPdf ? '6px 8px' : '10px 16px';
 
   const rows = sessions.map((session, i) => {
     const date = format(safeParse(session.startTime), 'dd-MM-yyyy');
@@ -42,19 +46,43 @@ export function generateReport(
     const modeIcon = session.feedingMode === 'bottle' ? '🍼' : '🤱';
     const volumeStr = session.feedingMode === 'bottle' && session.volume != null ? `${session.volume}ml` : '\u2014';
 
+    const sessionNum = sessions.length - i;
+
     return `<tr style="background:${rowBg}">
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${date}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${modeIcon}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${startTime}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${endTime}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#2A9D8F;font-weight:600">${firstMin}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#9B5DE5;font-weight:600">${secondMin}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#D97706;font-weight:600">${breakMin}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;font-weight:700">${durationMin}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#E67E22;font-weight:600">${volumeStr}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${audio}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#94A3B8;font-weight:600">${sessionNum}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0">${date}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center">${modeIcon}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0">${startTime}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0">${endTime}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#2A9D8F;font-weight:600">${firstMin}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#9B5DE5;font-weight:600">${secondMin}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#D97706;font-weight:600">${breakMin}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;font-weight:700">${durationMin}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#E67E22;font-weight:600">${volumeStr}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center">${audio}</td>
     </tr>`;
   });
+
+  const pdfStyles = forPdf ? `
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 12mm;
+    }
+    body {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    thead { display: table-header-group; }
+  </style>` : '';
+
+  const fontSize = forPdf ? '11px' : '14px';
+  const headPad = forPdf ? '8px 8px' : '12px 16px';
+  const maxWidth = forPdf ? '100%' : '650px';
+  const bodyPad = forPdf ? '0' : '20px';
+  const bgColor = forPdf ? '#FFFFFF' : '#F8FAFC';
 
   return `<!DOCTYPE html>
 <html>
@@ -62,29 +90,31 @@ export function generateReport(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Feeding Log - ${capitalName}</title>
+  ${pdfStyles}
 </head>
-<body style="margin:0;padding:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8FAFC;color:#1E293B">
-  <div style="max-width:650px;margin:0 auto">
+<body style="margin:0;padding:${bodyPad};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:${bgColor};color:#1E293B">
+  <div style="max-width:${maxWidth};margin:0 auto">
 
-    <div style="margin-bottom:20px">
-      <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#1E293B">Baby: ${capitalName}</h2>
-      <p style="margin:0;font-size:14px;color:#64748B">${dateRange}</p>
+    <div style="margin-bottom:${forPdf ? '12px' : '20px'}">
+      <h2 style="margin:0 0 4px 0;font-size:${forPdf ? '16px' : '20px'};font-weight:700;color:#1E293B">Baby: ${capitalName}</h2>
+      <p style="margin:0;font-size:${forPdf ? '11px' : '14px'};color:#64748B">${dateRange}</p>
     </div>
 
-    <div style="background:white;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0">
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <div style="background:white;border-radius:${forPdf ? '4px' : '10px'};overflow:hidden;border:1px solid #E2E8F0">
+      <table style="width:100%;border-collapse:collapse;font-size:${fontSize}">
         <thead>
           <tr style="background:#F1F5F9">
-            <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Date</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Type</th>
-            <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Start Time</th>
-            <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">End Time</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#2A9D8F;border-bottom:2px solid #CBD5E1">Left Breast</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#9B5DE5;border-bottom:2px solid #CBD5E1">Right Breast</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#D97706;border-bottom:2px solid #CBD5E1">Break</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Total</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#E67E22;border-bottom:2px solid #CBD5E1">Volume</th>
-            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Audio Note</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">#</th>
+            <th style="padding:${headPad};text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Date</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Type</th>
+            <th style="padding:${headPad};text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Start</th>
+            <th style="padding:${headPad};text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">End</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#2A9D8F;border-bottom:2px solid #CBD5E1">Left</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#9B5DE5;border-bottom:2px solid #CBD5E1">Right</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#D97706;border-bottom:2px solid #CBD5E1">Break</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Total</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#E67E22;border-bottom:2px solid #CBD5E1">Volume</th>
+            <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Audio</th>
           </tr>
         </thead>
         <tbody>
@@ -93,16 +123,20 @@ export function generateReport(
       </table>
     </div>
 
-    ${buildDiaperSection(diaperLogs)}
+    ${buildDiaperSection(diaperLogs, forPdf)}
 
-    <p style="text-align:center;margin-top:16px;font-size:12px;color:#94A3B8">Exported on ${exportedAt}</p>
+    <p style="text-align:center;margin-top:${forPdf ? '8px' : '16px'};font-size:${forPdf ? '9px' : '12px'};color:#94A3B8">Exported on ${exportedAt}</p>
   </div>
 </body>
 </html>`;
 }
 
-function buildDiaperSection(logs: DiaperLog[]): string {
+function buildDiaperSection(logs: DiaperLog[], forPdf = false): string {
   if (logs.length === 0) return '';
+
+  const cellPd = forPdf ? '4px 8px' : '8px 16px';
+  const headPd = forPdf ? '6px 8px' : '10px 16px';
+  const fontSize = forPdf ? '11px' : '14px';
 
   // Group logs by date and count daily totals
   const dailyMap = new Map<string, { pee: number; poop: number; total: number }>();
@@ -121,24 +155,24 @@ function buildDiaperSection(logs: DiaperLog[]): string {
     const dateLabel = format(safeParse(dateKey), 'dd-MM-yyyy');
     const rowBg = i % 2 === 0 ? '#FFFFFF' : '#FFF8F0';
     return `<tr style="background:${rowBg}">
-      <td style="padding:8px 16px;border-bottom:1px solid #E2E8F0">${dateLabel}</td>
-      <td style="padding:8px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${counts.pee}</td>
-      <td style="padding:8px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${counts.poop}</td>
-      <td style="padding:8px 16px;border-bottom:1px solid #E2E8F0;text-align:center;font-weight:600">${counts.total}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0">${dateLabel}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center">${counts.pee}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center">${counts.poop}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center;font-weight:600">${counts.total}</td>
     </tr>`;
   });
 
   return `
-    <div style="margin-top:28px;margin-bottom:8px">
-      <h3 style="margin:0 0 12px 0;font-size:18px;font-weight:700;color:#1E293B">🧷 Diaper Changes</h3>
-      <div style="background:white;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0">
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <div style="margin-top:${forPdf ? '16px' : '28px'};margin-bottom:8px">
+      <h3 style="margin:0 0 ${forPdf ? '8px' : '12px'} 0;font-size:${forPdf ? '14px' : '18px'};font-weight:700;color:#1E293B">🧷 Diaper Changes</h3>
+      <div style="background:white;border-radius:${forPdf ? '4px' : '10px'};overflow:hidden;border:1px solid #E2E8F0">
+        <table style="width:100%;border-collapse:collapse;font-size:${fontSize}">
           <thead>
             <tr style="background:#FFF7ED">
-              <th style="padding:10px 16px;text-align:left;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">Date</th>
-              <th style="padding:10px 16px;text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">💧 Pee</th>
-              <th style="padding:10px 16px;text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">💩 Poop</th>
-              <th style="padding:10px 16px;text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">🧷 Total</th>
+              <th style="padding:${headPd};text-align:left;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">Date</th>
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">💧 Pee</th>
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">💩 Poop</th>
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#92400E;border-bottom:2px solid #FDE68A">🧷 Total</th>
             </tr>
           </thead>
           <tbody>
@@ -175,6 +209,34 @@ export async function exportToCSV(
     await Sharing.shareAsync(file.uri, {
       mimeType: 'text/html',
       dialogTitle: `Share feeding log for ${babyName}`,
+    });
+  }
+}
+
+/**
+ * Export sessions as a PDF report and share
+ */
+export async function exportToPDF(
+  sessions: FeedingSession[],
+  babyName: string,
+  startDate: string,
+  endDate: string,
+  diaperLogs: DiaperLog[] = []
+): Promise<void> {
+  const html = generateReport(sessions, babyName, startDate, endDate, diaperLogs, true);
+
+  // Generate PDF from HTML
+  const { uri } = await Print.printToFileAsync({
+    html,
+    width: 842,  // A4 landscape width in points
+    height: 595, // A4 landscape height in points
+  });
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Share report for ${babyName}`,
     });
   }
 }

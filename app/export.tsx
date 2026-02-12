@@ -14,7 +14,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import { getSessionsByBabyAndDateRange, getDiaperLogsByBabyAndDateRange } from '../database';
-import { exportToCSV } from '../utils/export';
+import { exportToCSV, exportToPDF } from '../utils/export';
 import { FeedingSession, DiaperLog } from '../types';
 import { format, subDays } from 'date-fns';
 
@@ -29,7 +29,7 @@ export default function ExportScreen() {
   const [endDay, setEndDay] = useState(format(now, 'dd'));
   const [endMonth, setEndMonth] = useState(format(now, 'MM'));
   const [endYear, setEndYear] = useState(format(now, 'yyyy'));
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'html' | 'pdf' | null>(null);
   const [selectedQuick, setSelectedQuick] = useState<number | null>(7);
 
   const startDate = `${startDay}-${startMonth}-${startYear}`;
@@ -65,10 +65,10 @@ export default function ExportScreen() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (exportFormat: 'html' | 'pdf') => {
     if (!selectedBaby) return;
 
-    setLoading(true);
+    setLoading(exportFormat);
     try {
       const rows = await getSessionsByBabyAndDateRange(
         selectedBaby.id,
@@ -106,16 +106,20 @@ export default function ExportScreen() {
 
       if (sessions.length === 0 && diaperLogs.length === 0) {
         Alert.alert('No Data', 'No feeding sessions or diaper changes found in the selected date range.');
-        setLoading(false);
+        setLoading(null);
         return;
       }
 
-      await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
+      if (exportFormat === 'pdf') {
+        await exportToPDF(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
+      } else {
+        await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
+      }
     } catch (err) {
       console.error('Export failed:', err);
       Alert.alert('Error', 'Failed to export data. Please try again.');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
@@ -278,22 +282,22 @@ export default function ExportScreen() {
 
         {/* Export button */}
         <TouchableOpacity
-          onPress={handleExport}
-          disabled={loading}
+          onPress={() => handleExport('pdf')}
+          disabled={!!loading}
           style={[
             styles.exportButton,
-            { backgroundColor: loading ? colors.textSecondary : colors.primary },
+            { backgroundColor: loading === 'pdf' ? colors.textSecondary : colors.primary },
           ]}
         >
-          {loading ? (
+          {loading === 'pdf' ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.exportText}>{'\uD83D\uDCCA'} Export Report</Text>
+            <Text style={styles.exportText}>📄 Export as PDF</Text>
           )}
         </TouchableOpacity>
 
         <Text style={[styles.note, { color: colors.textSecondary }]}>
-          Exports a beautifully formatted report with summary stats, feeding times, and durations. Opens in any browser.
+          Perfect for printing and sharing with doctors.
         </Text>
         </ScrollView>
       </View>
@@ -402,7 +406,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   exportText: {
     color: '#FFFFFF',
