@@ -27,6 +27,21 @@ export interface DiaperWeekStats {
   avgPerDay: number;
 }
 
+export interface BottleDayStats {
+  bottleCount: number;
+  breastCount: number;
+  totalVolume: number;   // ml
+  avgVolume: number;     // ml
+}
+
+export interface BottleWeekStats {
+  bottleCount: number;
+  breastCount: number;
+  totalVolume: number;   // ml
+  avgVolume: number;     // ml
+  avgDailyVolume: number; // ml per day
+}
+
 export interface PhaseEntry {
   type: FeedingPhase;
   startTime: string; // ISO

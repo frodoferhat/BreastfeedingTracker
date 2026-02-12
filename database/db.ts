@@ -186,7 +186,7 @@ export async function getSessionsByBabyAndDate(
   const database = await getDatabase();
   return database.getAllAsync(
     `SELECT * FROM feeding_sessions
-     WHERE baby_id = ? AND date(start_time) = ?
+     WHERE baby_id = ? AND date(start_time, 'localtime') = ?
      ORDER BY start_time DESC`,
     [babyId, date]
   );
@@ -200,7 +200,7 @@ export async function getSessionsByBabyAndDateRange(
   const database = await getDatabase();
   return database.getAllAsync(
     `SELECT * FROM feeding_sessions
-     WHERE baby_id = ? AND date(start_time) >= ? AND date(start_time) <= ?
+     WHERE baby_id = ? AND date(start_time, 'localtime') >= ? AND date(start_time, 'localtime') <= ?
      ORDER BY start_time DESC`,
     [babyId, startDate, endDate]
   );
@@ -212,8 +212,8 @@ export async function getMarkedDatesForBaby(
 ): Promise<string[]> {
   const database = await getDatabase();
   const rows: any[] = await database.getAllAsync(
-    `SELECT DISTINCT date(start_time) as date FROM feeding_sessions
-     WHERE baby_id = ? AND strftime('%Y-%m', start_time) = ?`,
+    `SELECT DISTINCT date(start_time, 'localtime') as date FROM feeding_sessions
+     WHERE baby_id = ? AND strftime('%Y-%m', start_time, 'localtime') = ?`,
     [babyId, yearMonth]
   );
   return rows.map((r) => r.date);
@@ -229,7 +229,7 @@ export async function getDayStats(babyId: string, date: string): Promise<any> {
        COALESCE(MAX(duration), 0) as longest_session,
        COALESCE(MIN(duration), 0) as shortest_session
      FROM feeding_sessions
-     WHERE baby_id = ? AND date(start_time) = ? AND end_time IS NOT NULL`,
+     WHERE baby_id = ? AND date(start_time, 'localtime') = ? AND end_time IS NOT NULL`,
     [babyId, date]
   );
 }
@@ -246,7 +246,7 @@ export async function getWeekStats(
        COALESCE(SUM(duration), 0) as total_duration,
        COALESCE(AVG(duration), 0) as avg_duration
      FROM feeding_sessions
-     WHERE baby_id = ? AND date(start_time) >= ? AND date(start_time) <= ? AND end_time IS NOT NULL`,
+     WHERE baby_id = ? AND date(start_time, 'localtime') >= ? AND date(start_time, 'localtime') <= ? AND end_time IS NOT NULL`,
     [babyId, startDate, endDate]
   );
 }
@@ -297,7 +297,7 @@ export async function getDiaperLogsByBabyAndDate(
   const database = await getDatabase();
   return database.getAllAsync(
     `SELECT * FROM diaper_logs
-     WHERE baby_id = ? AND date(created_at) = ?
+     WHERE baby_id = ? AND date(created_at, 'localtime') = ?
      ORDER BY created_at DESC`,
     [babyId, date]
   );
@@ -311,7 +311,7 @@ export async function getDiaperLogsByBabyAndDateRange(
   const database = await getDatabase();
   return database.getAllAsync(
     `SELECT * FROM diaper_logs
-     WHERE baby_id = ? AND date(created_at) >= ? AND date(created_at) <= ?
+     WHERE baby_id = ? AND date(created_at, 'localtime') >= ? AND date(created_at, 'localtime') <= ?
      ORDER BY created_at DESC`,
     [babyId, startDate, endDate]
   );
@@ -325,7 +325,7 @@ export async function getDiaperDayStats(babyId: string, date: string): Promise<a
        SUM(CASE WHEN type = 'pee' OR type = 'both' THEN 1 ELSE 0 END) as total_pee,
        SUM(CASE WHEN type = 'poop' OR type = 'both' THEN 1 ELSE 0 END) as total_poop
      FROM diaper_logs
-     WHERE baby_id = ? AND date(created_at) = ?`,
+     WHERE baby_id = ? AND date(created_at, 'localtime') = ?`,
     [babyId, date]
   );
 }
@@ -342,7 +342,41 @@ export async function getDiaperWeekStats(
        SUM(CASE WHEN type = 'pee' OR type = 'both' THEN 1 ELSE 0 END) as total_pee,
        SUM(CASE WHEN type = 'poop' OR type = 'both' THEN 1 ELSE 0 END) as total_poop
      FROM diaper_logs
-     WHERE baby_id = ? AND date(created_at) >= ? AND date(created_at) <= ?`,
+     WHERE baby_id = ? AND date(created_at, 'localtime') >= ? AND date(created_at, 'localtime') <= ?`,
+    [babyId, startDate, endDate]
+  );
+}
+
+// ─── Bottle / Feeding Mode Stats ─────────────────────────────
+
+export async function getBottleDayStats(babyId: string, date: string): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       SUM(CASE WHEN feeding_mode = 'bottle' THEN 1 ELSE 0 END) as bottle_count,
+       SUM(CASE WHEN feeding_mode = 'breast' OR feeding_mode IS NULL THEN 1 ELSE 0 END) as breast_count,
+       COALESCE(SUM(CASE WHEN feeding_mode = 'bottle' THEN volume ELSE 0 END), 0) as total_volume,
+       COALESCE(AVG(CASE WHEN feeding_mode = 'bottle' AND volume IS NOT NULL THEN volume END), 0) as avg_volume
+     FROM feeding_sessions
+     WHERE baby_id = ? AND date(start_time, 'localtime') = ? AND end_time IS NOT NULL`,
+    [babyId, date]
+  );
+}
+
+export async function getBottleWeekStats(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       SUM(CASE WHEN feeding_mode = 'bottle' THEN 1 ELSE 0 END) as bottle_count,
+       SUM(CASE WHEN feeding_mode = 'breast' OR feeding_mode IS NULL THEN 1 ELSE 0 END) as breast_count,
+       COALESCE(SUM(CASE WHEN feeding_mode = 'bottle' THEN volume ELSE 0 END), 0) as total_volume,
+       COALESCE(AVG(CASE WHEN feeding_mode = 'bottle' AND volume IS NOT NULL THEN volume END), 0) as avg_volume
+     FROM feeding_sessions
+     WHERE baby_id = ? AND date(start_time, 'localtime') >= ? AND date(start_time, 'localtime') <= ? AND end_time IS NOT NULL`,
     [babyId, startDate, endDate]
   );
 }

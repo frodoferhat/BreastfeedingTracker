@@ -23,4 +23,6 @@ export {
   getDiaperLogsByBabyAndDateRange,
   getDiaperDayStats,
   getDiaperWeekStats,
+  getBottleDayStats,
+  getBottleWeekStats,
 } from './db';

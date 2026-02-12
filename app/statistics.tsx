@@ -10,9 +10,9 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import StatsSummary from '../components/StatsSummary';
-import { getDayStats, getWeekStats, getDiaperDayStats, getDiaperWeekStats } from '../database';
+import { getDayStats, getWeekStats, getDiaperDayStats, getDiaperWeekStats, getBottleDayStats, getBottleWeekStats } from '../database';
 import { getTodayDate, formatDateDisplay } from '../utils/time';
-import { DayStatistics, DiaperDayStats, DiaperWeekStats } from '../types';
+import { DayStatistics, DiaperDayStats, DiaperWeekStats, BottleDayStats, BottleWeekStats } from '../types';
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 
 export default function StatisticsScreen() {
@@ -25,6 +25,9 @@ export default function StatisticsScreen() {
   const [todayDiaper, setTodayDiaper] = useState<DiaperDayStats | null>(null);
   const [yesterdayDiaper, setYesterdayDiaper] = useState<DiaperDayStats | null>(null);
   const [weekDiaper, setWeekDiaper] = useState<DiaperWeekStats | null>(null);
+  const [todayBottle, setTodayBottle] = useState<BottleDayStats | null>(null);
+  const [yesterdayBottle, setYesterdayBottle] = useState<BottleDayStats | null>(null);
+  const [weekBottle, setWeekBottle] = useState<BottleWeekStats | null>(null);
 
   useEffect(() => {
     if (selectedBaby) {
@@ -113,6 +116,41 @@ export default function StatisticsScreen() {
           avgPerDay: Math.round((weekDiaperRow.total ?? 0) / days * 10) / 10,
         });
       }
+
+      // Bottle stats - today
+      const todayBottleRow = await getBottleDayStats(selectedBaby.id, today);
+      if (todayBottleRow) {
+        setTodayBottle({
+          bottleCount: todayBottleRow.bottle_count ?? 0,
+          breastCount: todayBottleRow.breast_count ?? 0,
+          totalVolume: todayBottleRow.total_volume ?? 0,
+          avgVolume: Math.round(todayBottleRow.avg_volume ?? 0),
+        });
+      }
+
+      // Bottle stats - yesterday
+      const yesterdayBottleRow = await getBottleDayStats(selectedBaby.id, yesterday);
+      if (yesterdayBottleRow) {
+        setYesterdayBottle({
+          bottleCount: yesterdayBottleRow.bottle_count ?? 0,
+          breastCount: yesterdayBottleRow.breast_count ?? 0,
+          totalVolume: yesterdayBottleRow.total_volume ?? 0,
+          avgVolume: Math.round(yesterdayBottleRow.avg_volume ?? 0),
+        });
+      }
+
+      // Bottle stats - week
+      const weekBottleRow = await getBottleWeekStats(selectedBaby.id, weekStart, weekEnd);
+      if (weekBottleRow) {
+        const days = 7;
+        setWeekBottle({
+          bottleCount: weekBottleRow.bottle_count ?? 0,
+          breastCount: weekBottleRow.breast_count ?? 0,
+          totalVolume: weekBottleRow.total_volume ?? 0,
+          avgVolume: Math.round(weekBottleRow.avg_volume ?? 0),
+          avgDailyVolume: Math.round((weekBottleRow.total_volume ?? 0) / days),
+        });
+      }
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
@@ -184,6 +222,28 @@ export default function StatisticsScreen() {
 
         <DiaperWeekStatsCard
           stats={weekDiaper}
+          colors={colors}
+        />
+
+        {/* Bottle / Feeding Mode Statistics */}
+        <View style={styles.sectionDivider}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>🍼 Bottle Feeding</Text>
+        </View>
+
+        <BottleStatsCard
+          title={`📅 Today — ${formatDateDisplay(getTodayDate())}`}
+          stats={todayBottle}
+          colors={colors}
+        />
+
+        <BottleStatsCard
+          title={`📅 Yesterday — ${formatDateDisplay(yesterday)}`}
+          stats={yesterdayBottle}
+          colors={colors}
+        />
+
+        <BottleWeekStatsCard
+          stats={weekBottle}
           colors={colors}
         />
       </ScrollView>
@@ -280,6 +340,127 @@ function DiaperWeekStatsCard({ stats, colors }: { stats: DiaperWeekStats | null;
   );
 }
 
+// ─── Ratio Bar Component ─────────────────────────────────
+
+function RatioBar({ breastCount, bottleCount, colors }: { breastCount: number; bottleCount: number; colors: any }) {
+  const total = breastCount + bottleCount;
+  if (total === 0) return null;
+  const breastPct = Math.round((breastCount / total) * 100);
+  const bottlePct = 100 - breastPct;
+
+  return (
+    <View style={styles.ratioContainer}>
+      <View style={styles.ratioLabels}>
+        <Text style={[styles.ratioLabelText, { color: '#2A9D8F' }]}>🤱 Breast {breastPct}%</Text>
+        <Text style={[styles.ratioLabelText, { color: '#E67E22' }]}>🍼 Bottle {bottlePct}%</Text>
+      </View>
+      <View style={[styles.ratioBarTrack, { backgroundColor: colors.background }]}>
+        {breastPct > 0 && (
+          <View style={[styles.ratioBarSegment, { flex: breastPct, backgroundColor: '#2A9D8F', borderTopLeftRadius: 6, borderBottomLeftRadius: 6, borderTopRightRadius: bottlePct === 0 ? 6 : 0, borderBottomRightRadius: bottlePct === 0 ? 6 : 0 }]} />
+        )}
+        {bottlePct > 0 && (
+          <View style={[styles.ratioBarSegment, { flex: bottlePct, backgroundColor: '#E67E22', borderTopRightRadius: 6, borderBottomRightRadius: 6, borderTopLeftRadius: breastPct === 0 ? 6 : 0, borderBottomLeftRadius: breastPct === 0 ? 6 : 0 }]} />
+        )}
+      </View>
+      <View style={styles.ratioLabels}>
+        <Text style={[styles.ratioCounts, { color: colors.textSecondary }]}>{breastCount} feeds</Text>
+        <Text style={[styles.ratioCounts, { color: colors.textSecondary }]}>{bottleCount} feeds</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Bottle Stats Card (Day) ─────────────────────────────
+
+function BottleStatsCard({ title, stats, colors }: { title: string; stats: BottleDayStats | null; colors: any }) {
+  if (!stats || (stats.bottleCount === 0 && stats.breastCount === 0)) {
+    return (
+      <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.diaperCardTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.diaperCardEmpty, { color: colors.textSecondary }]}>
+          No feeding sessions recorded
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.diaperCardTitle, { color: colors.text }]}>{title}</Text>
+
+      <RatioBar breastCount={stats.breastCount} bottleCount={stats.bottleCount} colors={colors} />
+
+      {stats.bottleCount > 0 && (
+        <View style={[styles.diaperStatsRow, { marginTop: 12 }]}>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>🍼</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.bottleCount}</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Bottles</Text>
+          </View>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>💧</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.totalVolume} ml</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
+          </View>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>📊</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.avgVolume} ml</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Avg</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Bottle Stats Card (Week) ────────────────────────────
+
+function BottleWeekStatsCard({ stats, colors }: { stats: BottleWeekStats | null; colors: any }) {
+  if (!stats || (stats.bottleCount === 0 && stats.breastCount === 0)) {
+    return (
+      <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.diaperCardTitle, { color: colors.text }]}>📊 This Week</Text>
+        <Text style={[styles.diaperCardEmpty, { color: colors.textSecondary }]}>
+          No feeding sessions recorded
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.diaperCardTitle, { color: colors.text }]}>📊 This Week</Text>
+
+      <RatioBar breastCount={stats.breastCount} bottleCount={stats.bottleCount} colors={colors} />
+
+      {stats.bottleCount > 0 && (
+        <View style={[styles.diaperStatsRow, { marginTop: 12 }]}>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>🍼</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.bottleCount}</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Bottles</Text>
+          </View>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>💧</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.totalVolume} ml</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
+          </View>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>📊</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.avgVolume} ml</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Avg</Text>
+          </View>
+          <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+            <Text style={styles.diaperStatEmoji}>📈</Text>
+            <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.avgDailyVolume} ml</Text>
+            <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Avg/Day</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -357,5 +538,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
+  },
+  ratioContainer: {
+    gap: 6,
+  },
+  ratioLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  ratioLabelText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ratioBarTrack: {
+    flexDirection: 'row',
+    height: 14,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  ratioBarSegment: {
+    height: '100%',
+  },
+  ratioCounts: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 });
