@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ActiveSession, FeedingPhase, FeedingMode, PhaseEntry } from '../types';
+import { ActiveSession, FeedingPhase, FeedingMode, PhaseEntry, LastFeedInfo } from '../types';
 import {
   insertSession,
   endSession as dbEndSession,
@@ -50,6 +50,7 @@ export function useFeedingSession(babyId: string | null) {
   const [suggestedBreast, setSuggestedBreast] = useState<FeedingPhase | null>(null);
   const [lastWasBottle, setLastWasBottle] = useState(false);
   const [suggestedVersion, setSuggestedVersion] = useState(0);
+  const [lastFeedInfo, setLastFeedInfo] = useState<LastFeedInfo | null>(null);
 
   const loadSuggestedBreast = async () => {
     if (!babyId) return;
@@ -58,9 +59,30 @@ export function useFeedingSession(babyId: string | null) {
       if (!row) {
         setSuggestedBreast(null);
         setLastWasBottle(false);
+        setLastFeedInfo(null);
         setSuggestedVersion(v => v + 1);
         return;
       }
+
+      // Build lastFeedInfo
+      let lastBreast: 'first' | 'second' | null = null;
+      if (row.phases) {
+        const phases: PhaseEntry[] = JSON.parse(row.phases);
+        for (let i = phases.length - 1; i >= 0; i--) {
+          if (phases[i].type === 'first' || phases[i].type === 'second') {
+            lastBreast = phases[i].type as 'first' | 'second';
+            break;
+          }
+        }
+      }
+
+      setLastFeedInfo({
+        endTime: row.end_time,
+        duration: row.duration ?? 0,
+        feedingMode: row.feeding_mode ?? 'breast',
+        lastBreast,
+        volume: row.volume ?? null,
+      });
 
       // If last session was bottle, don't suggest a breast
       if (row.feeding_mode === 'bottle') {
@@ -71,22 +93,17 @@ export function useFeedingSession(babyId: string | null) {
       }
 
       setLastWasBottle(false);
-      if (row.phases) {
-        const phases: PhaseEntry[] = JSON.parse(row.phases);
-        // Find the last breast phase (not break)
-        for (let i = phases.length - 1; i >= 0; i--) {
-          if (phases[i].type === 'first' || phases[i].type === 'second') {
-            setSuggestedBreast(phases[i].type === 'first' ? 'second' : 'first');
-            setSuggestedVersion(v => v + 1);
-            return;
-          }
-        }
+      if (lastBreast) {
+        setSuggestedBreast(lastBreast === 'first' ? 'second' : 'first');
+        setSuggestedVersion(v => v + 1);
+        return;
       }
       setSuggestedBreast(null);
       setSuggestedVersion(v => v + 1);
     } catch {
       setSuggestedBreast(null);
       setLastWasBottle(false);
+      setLastFeedInfo(null);
       setSuggestedVersion(v => v + 1);
     }
   };
@@ -506,6 +523,7 @@ export function useFeedingSession(babyId: string | null) {
     suggestedBreast,
     lastWasBottle,
     suggestedVersion,
+    lastFeedInfo,
     feedingMode,
     toggleFeeding,
     startFeeding,

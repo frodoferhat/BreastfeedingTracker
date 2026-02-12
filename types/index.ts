@@ -80,6 +80,14 @@ export interface ActiveSession {
   feedingMode: FeedingMode;
 }
 
+export interface LastFeedInfo {
+  endTime: string;       // ISO datetime
+  duration: number;      // seconds
+  feedingMode: FeedingMode;
+  lastBreast: 'first' | 'second' | null; // which breast was last used
+  volume: number | null; // ml, for bottle
+}
+
 export interface DayStatistics {
   date: string;
   totalFeedings: number;

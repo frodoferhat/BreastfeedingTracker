@@ -34,6 +34,14 @@ const formatMM_SS = (s: number) => {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 };
 
+const formatTimeSince = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m ago`;
+  if (m > 0) return `${m}m ago`;
+  return 'just now';
+};
+
 export default function HomeScreen() {
   const { colors, toggleTheme, mode } = useTheme();
   const { babies, selectedBaby, selectBaby, addBaby, removeBaby, loading } = useBaby();
@@ -48,6 +56,7 @@ export default function HomeScreen() {
     breakElapsed,
     suggestedBreast,
     lastWasBottle,
+    lastFeedInfo,
     feedingMode,
     switchBreast,
     toggleBreak,
@@ -66,6 +75,23 @@ export default function HomeScreen() {
   const [volumeUnit, setVolumeUnit] = useState<'ml' | 'oz'>('ml');
   const [selectedMode, setSelectedMode] = useState<FeedingMode>('breast');
   const volumeScrollRef = useRef<ScrollView>(null);
+
+  // Live "time since last feed" ticker
+  const [timeSinceLast, setTimeSinceLast] = useState<number | null>(null);
+  useEffect(() => {
+    if (isFeeding || !lastFeedInfo?.endTime) {
+      setTimeSinceLast(null);
+      return;
+    }
+    const calcDiff = () => {
+      const endMs = new Date(lastFeedInfo.endTime.replace(' ', 'T')).getTime();
+      const diffSec = Math.max(0, Math.floor((Date.now() - endMs) / 1000));
+      setTimeSinceLast(diffSec);
+    };
+    calcDiff();
+    const id = setInterval(calcDiff, 60_000); // update every minute
+    return () => clearInterval(id);
+  }, [isFeeding, lastFeedInfo?.endTime]);
 
   // Reset to breast mode when switching babies
   const prevBabyIdRef = useRef(selectedBaby?.id);
@@ -260,7 +286,27 @@ export default function HomeScreen() {
           feedingMode={isFeeding ? feedingMode : selectedMode}
           onModeToggle={handleModeToggle}
         />
-        <Chronometer elapsed={elapsed} isRunning={isFeeding && !onBreak} />
+        {isFeeding ? (
+          <Chronometer elapsed={elapsed} isRunning={!onBreak} />
+        ) : timeSinceLast != null && lastFeedInfo ? (
+          <View style={styles.lastFeedContainer}>
+            <Text style={[styles.lastFeedTime, { color: colors.textSecondary }]}>
+              {'🕐 '}{formatTimeSince(timeSinceLast)}
+            </Text>
+            <Text style={[styles.lastFeedDetail, { color: colors.textSecondary }]}>
+              {lastFeedInfo.feedingMode === 'bottle'
+                ? `🍼 Bottle${lastFeedInfo.volume ? ` · ${lastFeedInfo.volume} ml` : ''}`
+                : lastFeedInfo.lastBreast === 'first'
+                  ? '🟢 Left Breast'
+                  : lastFeedInfo.lastBreast === 'second'
+                    ? '🟣 Right Breast'
+                    : '🤱 Breast'}
+              {' · '}{formatMM_SS(lastFeedInfo.duration)}{' TOTAL'}
+            </Text>
+          </View>
+        ) : (
+          <Chronometer elapsed={0} isRunning={false} />
+        )}
 
         {/* Break Button + Phase Summary — always rendered to prevent layout shift */}
         <View style={styles.phaseControls}>
@@ -763,5 +809,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  lastFeedContainer: {
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 2,
+  },
+  lastFeedTime: {
+    fontSize: 28,
+    fontWeight: '300',
+    fontVariant: ['tabular-nums'] as any,
+    letterSpacing: 1,
+  },
+  lastFeedDetail: {
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
 });

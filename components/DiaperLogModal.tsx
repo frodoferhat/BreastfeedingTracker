@@ -9,6 +9,7 @@ import {
   Pressable,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import { insertDiaperLog } from '../database';
@@ -22,6 +23,7 @@ interface DiaperLogModalProps {
 export default function DiaperLogModal({ visible, onClose }: DiaperLogModalProps) {
   const { colors } = useTheme();
   const { selectedBaby } = useBaby();
+  const router = useRouter();
   const [peeSelected, setPeeSelected] = useState(false);
   const [poopSelected, setPoopSelected] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,7 +69,17 @@ export default function DiaperLogModal({ visible, onClose }: DiaperLogModalProps
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.modal, { backgroundColor: colors.surface }]} onPress={() => {}}>
-          <Text style={[styles.title, { color: colors.text }]}>🧷 Diaper Change</Text>
+          <TouchableOpacity
+            style={styles.titleButton}
+            activeOpacity={0.6}
+            onPress={() => {
+              onClose();
+              router.push('/diaper-logs');
+            }}
+          >
+            <Text style={[styles.title, { color: colors.primary }]}>🧷 Diaper Change</Text>
+            <Text style={[styles.titleArrow, { color: colors.primary }]}>›</Text>
+          </TouchableOpacity>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Select what happened:
           </Text>
@@ -188,6 +200,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 4,
+  },
+  titleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  titleArrow: {
+    fontSize: 24,
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: 14,

@@ -264,7 +264,7 @@ export async function getActiveSession(babyId: string): Promise<any | null> {
 export async function getLastCompletedSession(babyId: string): Promise<any | null> {
   const database = await getDatabase();
   return database.getFirstAsync(
-    `SELECT phases, feeding_mode FROM feeding_sessions
+    `SELECT phases, feeding_mode, end_time, duration, volume FROM feeding_sessions
      WHERE baby_id = ? AND end_time IS NOT NULL
      ORDER BY start_time DESC LIMIT 1`,
     [babyId]

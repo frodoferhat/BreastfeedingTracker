@@ -40,12 +40,12 @@ export default function DiaperLogsScreen() {
       createdAt: r.created_at,
     }));
 
-    // Group by date
+    // Group by local date
     const map = new Map<string, DiaperLog[]>();
     for (const log of logs) {
-      const d = log.createdAt.substring(0, 10); // 'YYYY-MM-DD' works for both 'T' and ' ' separator
-      if (!map.has(d)) map.set(d, []);
-      map.get(d)!.push(log);
+      const localDate = format(new Date(log.createdAt.replace(' ', 'T')), 'yyyy-MM-dd');
+      if (!map.has(localDate)) map.set(localDate, []);
+      map.get(localDate)!.push(log);
     }
 
     const grouped: DayGroup[] = Array.from(map.entries())
@@ -168,7 +168,7 @@ export default function DiaperLogsScreen() {
                   </View>
                   <View style={styles.dateCardStats}>
                     <View style={[styles.miniChip, { backgroundColor: '#EFF6FF' }]}>
-                      <Text style={styles.miniChipEmoji}>�</Text>
+                      <Text style={styles.miniChipEmoji}>💧</Text>
                       <Text style={[styles.miniChipValue, { color: '#3B82F6' }]}>{group.peeCount}</Text>
                     </View>
                     <View style={[styles.miniChip, { backgroundColor: '#FEF3C7' }]}>

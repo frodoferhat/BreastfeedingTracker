@@ -398,7 +398,7 @@ function BottleStatsCard({ title, stats, colors }: { title: string; stats: Bottl
             <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Bottles</Text>
           </View>
           <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-            <Text style={styles.diaperStatEmoji}>💧</Text>
+            <Text style={styles.diaperStatEmoji}>🧪</Text>
             <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.totalVolume} ml</Text>
             <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
           </View>
@@ -441,7 +441,7 @@ function BottleWeekStatsCard({ stats, colors }: { stats: BottleWeekStats | null;
             <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Bottles</Text>
           </View>
           <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-            <Text style={styles.diaperStatEmoji}>💧</Text>
+            <Text style={styles.diaperStatEmoji}>🧪</Text>
             <Text style={[styles.diaperStatValue, { color: '#E67E22' }]}>{stats.totalVolume} ml</Text>
             <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
           </View>
