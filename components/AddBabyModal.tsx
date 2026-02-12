@@ -11,6 +11,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { BabyGender } from '../types';
@@ -68,17 +69,13 @@ export default function AddBabyModal({ visible, onAdd, onClose }: AddBabyModalPr
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAvoidingView
-          style={styles.overlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={[styles.popup, { backgroundColor: colors.surface }]}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Pressable style={styles.backdrop} onPress={() => { Keyboard.dismiss(); onClose(); }} />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={[styles.popup, { backgroundColor: colors.surface }]}>
           <Text style={[styles.title, { color: colors.text }]}>
             👶 Add Baby
           </Text>
@@ -185,9 +182,8 @@ export default function AddBabyModal({ visible, onAdd, onClose }: AddBabyModalPr
             </TouchableOpacity>
           </View>
         </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -196,15 +192,14 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  scrollContent: {
-    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
   popup: {
-    width: '100%',
+    width: '90%',
     maxWidth: 340,
     borderRadius: 20,
     padding: 28,

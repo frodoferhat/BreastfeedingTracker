@@ -1,10 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Modal,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import { useFeedingSession } from '../hooks/useFeedingSession';
+import { FeedingMode } from '../types';
 import FeedingButton from '../components/FeedingButton';
 import Chronometer from '../components/Chronometer';
 import ReminderPopup from '../components/ReminderPopup';
@@ -41,8 +47,11 @@ export default function HomeScreen() {
     secondElapsed,
     breakElapsed,
     suggestedBreast,
+    lastWasBottle,
+    feedingMode,
     switchBreast,
     toggleBreak,
+    saveVolume,
   } = useFeedingSession(selectedBaby?.id ?? null);
   const router = useRouter();
 
@@ -52,6 +61,25 @@ export default function HomeScreen() {
   const [showAddBaby, setShowAddBaby] = useState(false);
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
   const [showDiaper, setShowDiaper] = useState(false);
+  const [showVolumeModal, setShowVolumeModal] = useState(false);
+  const [volumeValue, setVolumeValue] = useState(0);
+  const [volumeUnit, setVolumeUnit] = useState<'ml' | 'oz'>('ml');
+  const [selectedMode, setSelectedMode] = useState<FeedingMode>('breast');
+  const volumeScrollRef = useRef<ScrollView>(null);
+
+  // Reset to breast mode when switching babies
+  const prevBabyIdRef = useRef(selectedBaby?.id);
+  useEffect(() => {
+    if (selectedBaby?.id !== prevBabyIdRef.current) {
+      prevBabyIdRef.current = selectedBaby?.id;
+      setSelectedMode('breast');
+    }
+  }, [selectedBaby?.id]);
+
+  // Volume picker constants
+  const ITEM_HEIGHT = 50;
+  const ML_VALUES = Array.from({ length: 61 }, (_, i) => i * 5); // 0, 5, 10, ... 300
+  const OZ_VALUES = Array.from({ length: 21 }, (_, i) => i * 0.5); // 0, 0.5, 1, ... 10
 
   const handleFeedingToggle = useCallback(async () => {
     if (!selectedBaby) {
@@ -59,14 +87,51 @@ export default function HomeScreen() {
       return;
     }
 
-    const result = await toggleFeeding();
+    const result = await toggleFeeding(selectedMode);
     if (result) {
       // Feeding just ended
       setLastSessionDuration(result.duration);
       setLastSessionId(result.sessionId);
-      setShowAudioRecorder(true);
+      if (result.feedingMode === 'bottle') {
+        // Show volume input for bottle feedings
+        setVolumeValue(0);
+        setShowVolumeModal(true);
+        // Scroll to top after modal renders
+        setTimeout(() => volumeScrollRef.current?.scrollTo({ y: 0, animated: false }), 100);
+      } else {
+        setShowAudioRecorder(true);
+      }
     }
-  }, [selectedBaby, toggleFeeding]);
+  }, [selectedBaby, toggleFeeding, selectedMode]);
+
+  const handleModeToggle = useCallback(() => {
+    setSelectedMode((prev) => (prev === 'breast' ? 'bottle' : 'breast'));
+  }, []);
+
+  const handleVolumeSubmit = async () => {
+    if (lastSessionId && volumeValue > 0) {
+      // Always store in ml
+      const mlValue = volumeUnit === 'oz'
+        ? Math.round(volumeValue * 29.5735)
+        : volumeValue;
+      await saveVolume(lastSessionId, mlValue);
+    }
+    setShowVolumeModal(false);
+    setShowAudioRecorder(true);
+  };
+
+  const handleVolumeSkip = () => {
+    setShowVolumeModal(false);
+    setShowAudioRecorder(true);
+  };
+
+  const handleVolumeScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const index = Math.round(y / ITEM_HEIGHT);
+    const values = volumeUnit === 'oz' ? OZ_VALUES : ML_VALUES;
+    const clamped = Math.max(0, Math.min(index, values.length - 1));
+    setVolumeValue(values[clamped]);
+  }, [volumeUnit]);
 
   const handleSetReminder = async (hours: number, minutes: number) => {
     setShowReminder(false);
@@ -160,8 +225,16 @@ export default function HomeScreen() {
         {/* Reserved space for status message — always present to avoid layout shift */}
         <View style={styles.statusContainer}>
           {isFeeding ? (
-            <Text style={[styles.statusMessage, { color: colors.success }]}>
-              Feeding Started!
+            <Text style={[styles.statusMessage, { color: feedingMode === 'bottle' ? '#E67E22' : colors.success }]}>
+              {feedingMode === 'bottle' ? 'Bottle Feeding!' : 'Feeding Started!'}
+            </Text>
+          ) : selectedMode === 'bottle' ? (
+            <Text style={[styles.statusMessage, { color: '#E67E22' }]}>
+              🍼 Bottle Mode
+            </Text>
+          ) : lastWasBottle ? (
+            <Text style={[styles.statusMessage, { color: '#E67E22' }]}>
+              🍼 Last feed was Bottle!
             </Text>
           ) : suggestedBreast ? (
             <Text
@@ -184,6 +257,8 @@ export default function HomeScreen() {
           currentPhase={currentPhase}
           onBreak={onBreak}
           onSwitch={switchBreast}
+          feedingMode={isFeeding ? feedingMode : selectedMode}
+          onModeToggle={handleModeToggle}
         />
         <Chronometer elapsed={elapsed} isRunning={isFeeding && !onBreak} />
 
@@ -217,21 +292,34 @@ export default function HomeScreen() {
                 </Text>
               </View>
 
-              {/* Left & Right breast timers side by side */}
-              <View style={styles.breastTimersRow}>
-                <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.breastTimerLabel, { color: '#2A9D8F' }]}>Left</Text>
-                  <Text style={[styles.breastTimerValue, { color: '#2A9D8F' }]}>
-                    {formatMM_SS(firstElapsed)}
-                  </Text>
+              {/* Left & Right breast timers — only for breast mode */}
+              {feedingMode === 'breast' ? (
+                <View style={styles.breastTimersRow}>
+                  <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.breastTimerLabel, { color: '#2A9D8F' }]}>Left</Text>
+                    <Text style={[styles.breastTimerValue, { color: '#2A9D8F' }]}>
+                      {formatMM_SS(firstElapsed)}
+                    </Text>
+                  </View>
+                  <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.breastTimerLabel, { color: '#9B5DE5' }]}>Right</Text>
+                    <Text style={[styles.breastTimerValue, { color: '#9B5DE5' }]}>
+                      {formatMM_SS(secondElapsed)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.breastTimerLabel, { color: '#9B5DE5' }]}>Right</Text>
-                  <Text style={[styles.breastTimerValue, { color: '#9B5DE5' }]}>
-                    {formatMM_SS(secondElapsed)}
-                  </Text>
+              ) : (
+                <View style={[styles.breastTimersRow, { opacity: 0 }]} pointerEvents="none">
+                  <View style={styles.breastTimerCard}>
+                    <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
+                    <Text style={styles.breastTimerValue}>00:00</Text>
+                  </View>
+                  <View style={styles.breastTimerCard}>
+                    <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
+                    <Text style={styles.breastTimerValue}>00:00</Text>
+                  </View>
                 </View>
-              </View>
+              )}
             </>
           ) : (
             <>
@@ -255,6 +343,99 @@ export default function HomeScreen() {
           )}
         </View>
       </View>
+
+      {/* Volume Input Modal (shows after bottle feeding ends) */}
+      <Modal visible={showVolumeModal} transparent animationType="fade">
+        <View style={styles.volumeModalOverlay}>
+          <View style={[styles.volumeModalCard, { backgroundColor: colors.surface }]}>
+            <Text style={styles.volumeModalEmoji}>🍼</Text>
+            <Text style={[styles.volumeModalTitle, { color: colors.text }]}>
+              How much did they drink?
+            </Text>
+
+            {/* Unit Toggle */}
+            <View style={styles.unitToggleRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  setVolumeUnit('ml');
+                  setVolumeValue(0);
+                  setTimeout(() => volumeScrollRef.current?.scrollTo({ y: 0, animated: true }), 50);
+                }}
+                style={[
+                  styles.unitButton,
+                  volumeUnit === 'ml' && styles.unitButtonActive,
+                  volumeUnit === 'ml' && { backgroundColor: '#E67E22' },
+                ]}
+              >
+                <Text style={[styles.unitButtonText, volumeUnit === 'ml' && styles.unitButtonTextActive]}>ml</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setVolumeUnit('oz');
+                  setVolumeValue(0);
+                  setTimeout(() => volumeScrollRef.current?.scrollTo({ y: 0, animated: true }), 50);
+                }}
+                style={[
+                  styles.unitButton,
+                  volumeUnit === 'oz' && styles.unitButtonActive,
+                  volumeUnit === 'oz' && { backgroundColor: '#E67E22' },
+                ]}
+              >
+                <Text style={[styles.unitButtonText, volumeUnit === 'oz' && styles.unitButtonTextActive]}>oz</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Scroll Picker */}
+            <View style={styles.scrollPickerContainer}>
+              <View style={[styles.scrollPickerHighlight, { borderColor: '#E67E22' }]} pointerEvents="none" />
+              <ScrollView
+                ref={volumeScrollRef}
+                showsVerticalScrollIndicator={false}
+                snapToInterval={ITEM_HEIGHT}
+                decelerationRate="fast"
+                onMomentumScrollEnd={handleVolumeScroll}
+                contentContainerStyle={{
+                  paddingVertical: ITEM_HEIGHT * 2,
+                }}
+                style={styles.scrollPicker}
+              >
+                {(volumeUnit === 'oz' ? OZ_VALUES : ML_VALUES).map((val, i) => {
+                  const label = volumeUnit === 'oz' ? val.toFixed(1) : String(val);
+                  return (
+                    <View key={i} style={[styles.scrollPickerItem, { height: ITEM_HEIGHT }]}>
+                      <Text style={[
+                        styles.scrollPickerText,
+                        { color: volumeValue === val ? '#E67E22' : colors.textSecondary },
+                        volumeValue === val && styles.scrollPickerTextActive,
+                      ]}>
+                        {label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              <Text style={[styles.scrollPickerUnit, { color: colors.textSecondary }]}>
+                {volumeUnit}
+              </Text>
+            </View>
+
+            <View style={styles.volumeButtons}>
+              <TouchableOpacity
+                onPress={handleVolumeSkip}
+                style={[styles.volumeSkipButton, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.volumeSkipText, { color: colors.textSecondary }]}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleVolumeSubmit}
+                style={[styles.volumeSaveButton, { backgroundColor: '#E67E22' }]}
+              >
+                <Text style={styles.volumeSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Audio Recorder Modal (shows after feeding ends) */}
       <AudioNoteRecorder
@@ -467,5 +648,120 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     fontVariant: ['tabular-nums'] as any,
+  },
+  volumeModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  volumeModalCard: {
+    width: 300,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  volumeModalEmoji: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  volumeModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  unitToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  unitButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  unitButtonActive: {
+    borderWidth: 0,
+  },
+  unitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  unitButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  scrollPickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 8,
+  },
+  scrollPickerHighlight: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: 50,
+    marginTop: -25,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderRadius: 8,
+  },
+  scrollPicker: {
+    height: 250,
+    width: 120,
+  },
+  scrollPickerItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollPickerText: {
+    fontSize: 24,
+    fontWeight: '500',
+  },
+  scrollPickerTextActive: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#E67E22',
+  },
+  scrollPickerUnit: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  volumeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  volumeSkipButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  volumeSkipText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  volumeSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  volumeSaveText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

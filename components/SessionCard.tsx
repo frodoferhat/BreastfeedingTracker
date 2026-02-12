@@ -95,8 +95,10 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
     >
       <View style={styles.row}>
         {sessionNumber != null && (
-          <View style={[styles.numberBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.numberText}>#{sessionNumber}</Text>
+          <View style={[styles.numberBadge, { backgroundColor: session.feedingMode === 'bottle' ? '#E67E22' : colors.primary }]}>
+            <Text style={styles.numberText}>
+              {session.feedingMode === 'bottle' ? `🍼${sessionNumber}` : `#${sessionNumber}`}
+            </Text>
           </View>
         )}
         <View style={styles.timeColumn}>
@@ -121,12 +123,19 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
           </Text>
         </View>
 
-        <View style={[styles.durationBadge, { backgroundColor: colors.primaryLight }]}>
-          <Text style={[styles.durationText, { color: colors.primary }]}>
-            {session.duration
-              ? formatDurationMMSS(session.duration)
-              : 'Active'}
-          </Text>
+        <View style={{ marginLeft: 'auto', alignItems: 'flex-end', flexShrink: 0 }}>
+          <View style={[styles.durationBadge, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.durationText, { color: colors.primary }]}>
+              {session.duration
+                ? formatDurationMMSS(session.duration)
+                : 'Active'}
+            </Text>
+          </View>
+          {session.feedingMode === 'bottle' && session.volume != null && (
+            <View style={styles.volumeBadge}>
+              <Text style={styles.volumeBadgeText}>{session.volume}ml</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -146,8 +155,8 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
 
       {expanded && (
         <View style={[styles.expandedSection, { borderTopColor: colors.border }]}>
-          {/* Phase Breakdown */}
-          {(session.firstBreastDuration != null || session.secondBreastDuration != null) && (
+          {/* Phase Breakdown — breast mode only */}
+          {session.feedingMode !== 'bottle' && (session.firstBreastDuration != null || session.secondBreastDuration != null) && (
             <View style={styles.phaseBreakdown}>
               <View style={styles.phaseRow}>
                 <View style={[styles.phaseDot, { backgroundColor: '#2A9D8F' }]} />
@@ -247,7 +256,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   durationBadge: {
-    marginLeft: 'auto',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -337,5 +345,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     fontVariant: ['tabular-nums'] as any,
+  },
+  volumeBadge: {
+    marginTop: 4,
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-end',
+  },
+  volumeBadgeText: {
+    color: '#E67E22',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

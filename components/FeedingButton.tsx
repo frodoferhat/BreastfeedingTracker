@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
-import { FeedingPhase } from '../types';
+import { FeedingPhase, FeedingMode } from '../types';
 
 interface FeedingButtonProps {
   isFeeding: boolean;
@@ -18,6 +18,8 @@ interface FeedingButtonProps {
   currentPhase?: FeedingPhase;
   onBreak?: boolean;
   onSwitch?: () => void;
+  feedingMode?: FeedingMode;
+  onModeToggle?: () => void;
 }
 
 const BUTTON_SIZE = Dimensions.get('window').width * 0.55;
@@ -26,6 +28,7 @@ const SWIPE_THRESHOLD = 60;
 // Breast phase colors
 const FIRST_COLOR = '#2A9D8F'; // teal
 const SECOND_COLOR = '#9B5DE5'; // soft purple
+const BOTTLE_COLOR = '#E67E22'; // warm orange
 
 export default function FeedingButton({
   isFeeding,
@@ -33,6 +36,8 @@ export default function FeedingButton({
   currentPhase = 'first',
   onBreak = false,
   onSwitch,
+  feedingMode = 'breast',
+  onModeToggle,
 }: FeedingButtonProps) {
   const { colors } = useTheme();
   const flipAnim = useRef(new Animated.Value(0)).current;
@@ -41,8 +46,10 @@ export default function FeedingButton({
   // Keep latest props in refs so PanResponder always sees current values
   const isFeedingRef = useRef(isFeeding);
   const onSwitchRef = useRef(onSwitch);
+  const onModeToggleRef = useRef(onModeToggle);
   isFeedingRef.current = isFeeding;
   onSwitchRef.current = onSwitch;
+  onModeToggleRef.current = onModeToggle;
 
   const doFlip = () => {
     Animated.sequence([
@@ -67,10 +74,22 @@ export default function FeedingButton({
         useNativeDriver: false,
       }),
       onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dx) > SWIPE_THRESHOLD && onSwitchRef.current && isFeedingRef.current) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          doFlip();
-          onSwitchRef.current();
+        if (Math.abs(g.dx) > SWIPE_THRESHOLD) {
+          if (isFeedingRef.current) {
+            // While feeding in breast mode → switch breast
+            if (onSwitchRef.current) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              doFlip();
+              onSwitchRef.current();
+            }
+          } else {
+            // While idle → toggle between breast/bottle mode
+            if (onModeToggleRef.current) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              doFlip();
+              onModeToggleRef.current();
+            }
+          }
         }
         Animated.spring(panX, {
           toValue: 0,
@@ -81,11 +100,15 @@ export default function FeedingButton({
   ).current;
 
   const getButtonColor = () => {
-    if (!isFeeding) return colors.primary;
+    if (!isFeeding) {
+      return feedingMode === 'bottle' ? BOTTLE_COLOR : colors.primary;
+    }
+    if (feedingMode === 'bottle') return BOTTLE_COLOR;
     return currentPhase === 'first' ? FIRST_COLOR : SECOND_COLOR;
   };
 
   const getEmoji = () => {
+    if (feedingMode === 'bottle') return '🍼';
     if (!isFeeding) return '👶';
     return '🤱';
   };
@@ -95,9 +118,24 @@ export default function FeedingButton({
     return 'TAP TO STOP';
   };
 
-  const getBreastLabel = () => {
-    if (!isFeeding) return null;
+  const getModeLabel = () => {
+    if (!isFeeding) {
+      return feedingMode === 'bottle' ? 'BOTTLE' : 'BREAST';
+    }
+    if (feedingMode === 'bottle') return 'BOTTLE';
     return currentPhase === 'first' ? 'LEFT BREAST' : 'RIGHT BREAST';
+  };
+
+  const getSwipeHint = () => {
+    if (!isFeeding) {
+      return feedingMode === 'bottle'
+        ? '⟵ swipe for 🤱 ⟶'
+        : '⟵ swipe for 🍼 ⟶';
+    }
+    if (feedingMode === 'breast') {
+      return '⟵ swipe to switch ⟶';
+    }
+    return null;
   };
 
   const flipInterpolate = flipAnim.interpolate({
@@ -105,12 +143,14 @@ export default function FeedingButton({
     outputRange: ['0deg', '90deg', '0deg'],
   });
 
-  const breastLabel = getBreastLabel();
   const buttonColor = getButtonColor();
+  const swipeHint = getSwipeHint();
+  // Enable swipe always except during bottle feeding
+  const enableSwipe = !(isFeeding && feedingMode === 'bottle');
 
   return (
     <Animated.View
-      {...(isFeeding ? panResponder.panHandlers : {})}
+      {...(enableSwipe ? panResponder.panHandlers : {})}
       style={{
         transform: [
           { translateX: panX },
@@ -137,14 +177,12 @@ export default function FeedingButton({
         ]}
       >
         <Text style={styles.emoji}>{getEmoji()}</Text>
-        {breastLabel && (
-          <Text style={styles.breastLabel}>{breastLabel}</Text>
-        )}
+        <Text style={styles.breastLabel}>{getModeLabel()}</Text>
         <Text style={[styles.label, { color: '#FFFFFF' }]}>
           {getLabel()}
         </Text>
-        {isFeeding && (
-          <Text style={styles.swipeHint}>⟵ swipe to switch ⟶</Text>
+        {swipeHint && (
+          <Text style={styles.swipeHint}>{swipeHint}</Text>
         )}
       </TouchableOpacity>
     </Animated.View>

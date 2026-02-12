@@ -2,6 +2,8 @@ export type BabyGender = 'boy' | 'girl' | undefined;
 
 export type FeedingPhase = 'first' | 'break' | 'second';
 
+export type FeedingMode = 'breast' | 'bottle';
+
 export type DiaperType = 'pee' | 'poop' | 'both';
 
 export interface DiaperLog {
@@ -46,6 +48,8 @@ export interface FeedingSession {
   startTime: string; // ISO datetime string (UTC)
   endTime: string | null; // ISO datetime string (UTC), null if ongoing
   duration: number | null; // total feeding duration in seconds (excluding breaks), null if ongoing
+  feedingMode: FeedingMode; // 'breast' or 'bottle'
+  volume: number | null; // ml, for bottle feeding
   firstBreastDuration: number | null;
   secondBreastDuration: number | null;
   breakDuration: number | null;
@@ -58,6 +62,7 @@ export interface ActiveSession {
   id: string;
   babyId: string;
   startTime: string;
+  feedingMode: FeedingMode;
 }
 
 export interface DayStatistics {

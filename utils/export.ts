@@ -39,15 +39,19 @@ export function generateReport(
     const breakMin = toMMSS(session.breakDuration);
     const audio = session.audioNotePath ? 'Yes' : 'No';
     const rowBg = i % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+    const modeIcon = session.feedingMode === 'bottle' ? '🍼' : '🤱';
+    const volumeStr = session.feedingMode === 'bottle' && session.volume != null ? `${session.volume}ml` : '\u2014';
 
     return `<tr style="background:${rowBg}">
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${date}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${modeIcon}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${startTime}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0">${endTime}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#2A9D8F;font-weight:600">${firstMin}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#9B5DE5;font-weight:600">${secondMin}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#D97706;font-weight:600">${breakMin}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;font-weight:700">${durationMin}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center;color:#E67E22;font-weight:600">${volumeStr}</td>
       <td style="padding:10px 16px;border-bottom:1px solid #E2E8F0;text-align:center">${audio}</td>
     </tr>`;
   });
@@ -72,12 +76,14 @@ export function generateReport(
         <thead>
           <tr style="background:#F1F5F9">
             <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Date</th>
+            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Type</th>
             <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Start Time</th>
             <th style="padding:12px 16px;text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">End Time</th>
             <th style="padding:12px 16px;text-align:center;font-weight:700;color:#2A9D8F;border-bottom:2px solid #CBD5E1">Left Breast</th>
             <th style="padding:12px 16px;text-align:center;font-weight:700;color:#9B5DE5;border-bottom:2px solid #CBD5E1">Right Breast</th>
             <th style="padding:12px 16px;text-align:center;font-weight:700;color:#D97706;border-bottom:2px solid #CBD5E1">Break</th>
             <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Total</th>
+            <th style="padding:12px 16px;text-align:center;font-weight:700;color:#E67E22;border-bottom:2px solid #CBD5E1">Volume</th>
             <th style="padding:12px 16px;text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Audio Note</th>
           </tr>
         </thead>

@@ -71,6 +71,12 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
   try {
     await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN phase_state TEXT');
   } catch { /* already exists */ }
+  try {
+    await database.runAsync("ALTER TABLE feeding_sessions ADD COLUMN feeding_mode TEXT DEFAULT 'breast'");
+  } catch { /* already exists */ }
+  try {
+    await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN volume INTEGER');
+  } catch { /* already exists */ }
 }
 
 // ─── Baby CRUD ───────────────────────────────────────────────
@@ -106,12 +112,13 @@ export async function deleteBaby(id: string): Promise<void> {
 export async function insertSession(
   id: string,
   babyId: string,
-  startTime: string
+  startTime: string,
+  feedingMode: string = 'breast'
 ): Promise<void> {
   const database = await getDatabase();
   await database.runAsync(
-    'INSERT INTO feeding_sessions (id, baby_id, start_time) VALUES (?, ?, ?)',
-    [id, babyId, startTime]
+    'INSERT INTO feeding_sessions (id, baby_id, start_time, feeding_mode) VALUES (?, ?, ?, ?)',
+    [id, babyId, startTime, feedingMode]
   );
 }
 
@@ -153,6 +160,17 @@ export async function updateSessionPhaseState(
   await database.runAsync(
     'UPDATE feeding_sessions SET phase_state = ? WHERE id = ?',
     [phaseState, id]
+  );
+}
+
+export async function updateSessionVolume(
+  id: string,
+  volume: number
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE feeding_sessions SET volume = ? WHERE id = ?',
+    [volume, id]
   );
 }
 
@@ -246,7 +264,7 @@ export async function getActiveSession(babyId: string): Promise<any | null> {
 export async function getLastCompletedSession(babyId: string): Promise<any | null> {
   const database = await getDatabase();
   return database.getFirstAsync(
-    `SELECT phases FROM feeding_sessions
+    `SELECT phases, feeding_mode FROM feeding_sessions
      WHERE baby_id = ? AND end_time IS NOT NULL
      ORDER BY start_time DESC LIMIT 1`,
     [babyId]

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ActiveSession, FeedingPhase, PhaseEntry } from '../types';
+import { ActiveSession, FeedingPhase, FeedingMode, PhaseEntry } from '../types';
 import {
   insertSession,
   endSession as dbEndSession,
   getActiveSession,
   getLastCompletedSession,
   updateSessionPhaseState,
+  updateSessionVolume,
 } from '../database';
 import { nowISO, calculateDuration, generateId } from '../utils/time';
 import { DEBOUNCE_MS } from '../constants';
@@ -18,6 +19,7 @@ interface PhaseStateSnapshot {
   firstAcc: number;
   secondAcc: number;
   breakAcc: number;
+  feedingMode: FeedingMode;
 }
 
 export function useFeedingSession(babyId: string | null) {
@@ -25,6 +27,7 @@ export function useFeedingSession(babyId: string | null) {
   const [elapsed, setElapsed] = useState(0);
   const [isFeeding, setIsFeeding] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [feedingMode, setFeedingMode] = useState<FeedingMode>('breast');
 
   // Phase tracking
   const [currentPhase, setCurrentPhase] = useState<FeedingPhase>('first');
@@ -45,24 +48,46 @@ export function useFeedingSession(babyId: string | null) {
 
   // Suggested breast for next session
   const [suggestedBreast, setSuggestedBreast] = useState<FeedingPhase | null>(null);
+  const [lastWasBottle, setLastWasBottle] = useState(false);
+  const [suggestedVersion, setSuggestedVersion] = useState(0);
 
   const loadSuggestedBreast = async () => {
     if (!babyId) return;
     try {
       const row = await getLastCompletedSession(babyId);
-      if (row?.phases) {
+      if (!row) {
+        setSuggestedBreast(null);
+        setLastWasBottle(false);
+        setSuggestedVersion(v => v + 1);
+        return;
+      }
+
+      // If last session was bottle, don't suggest a breast
+      if (row.feeding_mode === 'bottle') {
+        setSuggestedBreast(null);
+        setLastWasBottle(true);
+        setSuggestedVersion(v => v + 1);
+        return;
+      }
+
+      setLastWasBottle(false);
+      if (row.phases) {
         const phases: PhaseEntry[] = JSON.parse(row.phases);
         // Find the last breast phase (not break)
         for (let i = phases.length - 1; i >= 0; i--) {
           if (phases[i].type === 'first' || phases[i].type === 'second') {
             setSuggestedBreast(phases[i].type === 'first' ? 'second' : 'first');
+            setSuggestedVersion(v => v + 1);
             return;
           }
         }
       }
       setSuggestedBreast(null);
+      setSuggestedVersion(v => v + 1);
     } catch {
       setSuggestedBreast(null);
+      setLastWasBottle(false);
+      setSuggestedVersion(v => v + 1);
     }
   };
 
@@ -77,6 +102,7 @@ export function useFeedingSession(babyId: string | null) {
       firstAcc: firstAccRef.current,
       secondAcc: secondAccRef.current,
       breakAcc: breakAccRef.current,
+      feedingMode,
     };
     // Accumulate current running phase into snapshot so elapsed is correct on restore
     if (phaseStartRef.current) {
@@ -96,7 +122,7 @@ export function useFeedingSession(babyId: string | null) {
     } catch (err) {
       console.error('Failed to save phase state:', err);
     }
-  }, [activeSession, currentPhase, onBreak]);
+  }, [activeSession, currentPhase, onBreak, feedingMode]);
 
   // Ref to savePhaseState so the cleanup effect always sees the latest
   const savePhaseStateRef = useRef(savePhaseState);
@@ -114,6 +140,7 @@ export function useFeedingSession(babyId: string | null) {
       setBreakElapsed(0);
       setCurrentPhase('first');
       setOnBreak(false);
+      setFeedingMode('breast');
       return;
     }
 
@@ -181,13 +208,16 @@ export function useFeedingSession(babyId: string | null) {
     try {
       const session = await getActiveSession(babyId);
       if (session) {
+        const restoredMode: FeedingMode = session.feeding_mode ?? 'breast';
         const active: ActiveSession = {
           id: session.id,
           babyId: session.baby_id,
           startTime: session.start_time,
+          feedingMode: restoredMode,
         };
         setActiveSession(active);
         setIsFeeding(true);
+        setFeedingMode(restoredMode);
 
         // Try to restore full phase state from DB
         if (session.phase_state) {
@@ -195,6 +225,7 @@ export function useFeedingSession(babyId: string | null) {
             const snap: PhaseStateSnapshot = JSON.parse(session.phase_state);
             setCurrentPhase(snap.currentPhase);
             setOnBreak(snap.onBreak);
+            if (snap.feedingMode) setFeedingMode(snap.feedingMode);
             phasesRef.current = snap.phases;
             phaseStartRef.current = snap.phaseStart;
             firstAccRef.current = snap.firstAcc;
@@ -254,6 +285,7 @@ export function useFeedingSession(babyId: string | null) {
       firstAcc: firstAccRef.current,
       secondAcc: secondAccRef.current,
       breakAcc: breakAccRef.current,
+      feedingMode,
     };
     try {
       await updateSessionPhaseState(sessionId, JSON.stringify(snapshot));
@@ -262,7 +294,7 @@ export function useFeedingSession(babyId: string | null) {
     }
   };
 
-  const startFeeding = useCallback(async (): Promise<void> => {
+  const startFeeding = useCallback(async (mode: FeedingMode = 'breast'): Promise<void> => {
     if (!babyId) return;
 
     const now = Date.now();
@@ -273,10 +305,11 @@ export function useFeedingSession(babyId: string | null) {
     const startTime = nowISO();
 
     try {
-      await insertSession(id, babyId, startTime);
-      const session: ActiveSession = { id, babyId, startTime };
+      await insertSession(id, babyId, startTime, mode);
+      const session: ActiveSession = { id, babyId, startTime, feedingMode: mode };
       setActiveSession(session);
       setIsFeeding(true);
+      setFeedingMode(mode);
       setCurrentPhase('first');
       setOnBreak(false);
       setFirstElapsed(0);
@@ -285,9 +318,11 @@ export function useFeedingSession(babyId: string | null) {
       firstAccRef.current = 0;
       secondAccRef.current = 0;
       breakAccRef.current = 0;
-      phasesRef.current = [{ type: 'first', startTime }];
+      phasesRef.current = mode === 'bottle'
+        ? [{ type: 'first', startTime }]   // bottle uses single "first" phase
+        : [{ type: 'first', startTime }];
       phaseStartRef.current = startTime;
-      setStatusMessage('FEEDING STARTED');
+      setStatusMessage(mode === 'bottle' ? 'BOTTLE FEEDING STARTED' : 'FEEDING STARTED');
       setElapsed(0);
       await persistPhaseState(id, 'first', false);
     } catch (err) {
@@ -298,6 +333,7 @@ export function useFeedingSession(babyId: string | null) {
   const stopFeeding = useCallback(async (): Promise<{
     sessionId: string;
     duration: number;
+    feedingMode: FeedingMode;
   } | null> => {
     if (!activeSession) return null;
 
@@ -326,6 +362,7 @@ export function useFeedingSession(babyId: string | null) {
     const secondTotal = secondAccRef.current;
     const breakTotal = breakAccRef.current;
     const feedingDuration = firstTotal + secondTotal; // Exclude breaks
+    const endedMode = feedingMode;
 
     try {
       await dbEndSession(
@@ -337,10 +374,11 @@ export function useFeedingSession(babyId: string | null) {
         breakTotal,
         JSON.stringify(phasesRef.current)
       );
-      const result = { sessionId: activeSession.id, duration: feedingDuration };
+      const result = { sessionId: activeSession.id, duration: feedingDuration, feedingMode: endedMode };
       setIsFeeding(false);
       setActiveSession(null);
-      setStatusMessage('FEEDING ENDED');
+      setFeedingMode('breast'); // Reset to default
+      setStatusMessage(endedMode === 'bottle' ? 'BOTTLE FEEDING ENDED' : 'FEEDING ENDED');
       setElapsed(0);
       setFirstElapsed(0);
       setSecondElapsed(0);
@@ -438,14 +476,22 @@ export function useFeedingSession(babyId: string | null) {
     }
   }, [isFeeding, onBreak, currentPhase, activeSession]);
 
-  const toggleFeeding = useCallback(async () => {
+  const toggleFeeding = useCallback(async (mode: FeedingMode = 'breast') => {
     if (isFeeding) {
       return await stopFeeding();
     } else {
-      await startFeeding();
+      await startFeeding(mode);
       return null;
     }
   }, [isFeeding, startFeeding, stopFeeding]);
+
+  const saveVolume = useCallback(async (sessionId: string, volume: number) => {
+    try {
+      await updateSessionVolume(sessionId, volume);
+    } catch (err) {
+      console.error('Failed to save volume:', err);
+    }
+  }, []);
 
   return {
     isFeeding,
@@ -458,10 +504,14 @@ export function useFeedingSession(babyId: string | null) {
     secondElapsed,
     breakElapsed,
     suggestedBreast,
+    lastWasBottle,
+    suggestedVersion,
+    feedingMode,
     toggleFeeding,
     startFeeding,
     stopFeeding,
     switchBreast,
     toggleBreak,
+    saveVolume,
   };
 }

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  Pressable,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
@@ -63,9 +64,9 @@ export default function DiaperLogModal({ visible, onClose }: DiaperLogModalProps
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.overlay}>
-        <View style={[styles.modal, { backgroundColor: colors.surface }]}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={[styles.modal, { backgroundColor: colors.surface }]} onPress={() => {}}>
           <Text style={[styles.title, { color: colors.text }]}>🧷 Diaper Change</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Select what happened:
@@ -157,8 +158,8 @@ export default function DiaperLogModal({ visible, onClose }: DiaperLogModalProps
           >
             <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

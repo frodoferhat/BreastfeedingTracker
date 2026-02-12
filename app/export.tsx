@@ -81,6 +81,8 @@ export default function ExportScreen() {
         startTime: r.start_time,
         endTime: r.end_time,
         duration: r.duration,
+        feedingMode: r.feeding_mode ?? 'breast',
+        volume: r.volume ?? null,
         firstBreastDuration: r.first_breast_duration,
         secondBreastDuration: r.second_breast_duration,
         breakDuration: r.break_duration,
@@ -146,7 +148,7 @@ export default function ExportScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>
-          📤 Export Feeding Logs
+          📤 Export Feeding And Diaper Logs
         </Text>
 
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -286,7 +288,7 @@ export default function ExportScreen() {
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.exportText}>{'\uD83D\uDCCA'} Export Feeding Report</Text>
+            <Text style={styles.exportText}>{'\uD83D\uDCCA'} Export Report</Text>
           )}
         </TouchableOpacity>
 

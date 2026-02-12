@@ -110,6 +110,8 @@ export default function CalendarScreen() {
         startTime: r.start_time,
         endTime: r.end_time,
         duration: r.duration,
+        feedingMode: r.feeding_mode ?? 'breast',
+        volume: r.volume ?? null,
         firstBreastDuration: r.first_breast_duration,
         secondBreastDuration: r.second_breast_duration,
         breakDuration: r.break_duration,
