@@ -68,6 +68,9 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
   try {
     await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN phases TEXT');
   } catch { /* already exists */ }
+  try {
+    await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN phase_state TEXT');
+  } catch { /* already exists */ }
 }
 
 // ─── Baby CRUD ───────────────────────────────────────────────
@@ -139,6 +142,17 @@ export async function updateSessionAudioNote(
   await database.runAsync(
     'UPDATE feeding_sessions SET audio_note_path = ? WHERE id = ?',
     [audioNotePath, id]
+  );
+}
+
+export async function updateSessionPhaseState(
+  id: string,
+  phaseState: string
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE feeding_sessions SET phase_state = ? WHERE id = ?',
+    [phaseState, id]
   );
 }
 
@@ -248,8 +262,8 @@ export async function insertDiaperLog(
 ): Promise<void> {
   const database = await getDatabase();
   await database.runAsync(
-    'INSERT INTO diaper_logs (id, baby_id, type) VALUES (?, ?, ?)',
-    [id, babyId, type]
+    'INSERT INTO diaper_logs (id, baby_id, type, created_at) VALUES (?, ?, ?, ?)',
+    [id, babyId, type, new Date().toISOString()]
   );
 }
 

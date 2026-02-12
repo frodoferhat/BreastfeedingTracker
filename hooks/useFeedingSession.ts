@@ -5,9 +5,20 @@ import {
   endSession as dbEndSession,
   getActiveSession,
   getLastCompletedSession,
+  updateSessionPhaseState,
 } from '../database';
 import { nowISO, calculateDuration, generateId } from '../utils/time';
 import { DEBOUNCE_MS } from '../constants';
+
+interface PhaseStateSnapshot {
+  currentPhase: FeedingPhase;
+  onBreak: boolean;
+  phases: PhaseEntry[];
+  phaseStart: string | null;
+  firstAcc: number;
+  secondAcc: number;
+  breakAcc: number;
+}
 
 export function useFeedingSession(babyId: string | null) {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
@@ -55,11 +66,62 @@ export function useFeedingSession(babyId: string | null) {
     }
   };
 
-  // Restore active session on mount
+  // Save current phase state to DB (called before switching babies)
+  const savePhaseState = useCallback(async () => {
+    if (!activeSession) return;
+    const snapshot: PhaseStateSnapshot = {
+      currentPhase,
+      onBreak,
+      phases: phasesRef.current,
+      phaseStart: phaseStartRef.current,
+      firstAcc: firstAccRef.current,
+      secondAcc: secondAccRef.current,
+      breakAcc: breakAccRef.current,
+    };
+    // Accumulate current running phase into snapshot so elapsed is correct on restore
+    if (phaseStartRef.current) {
+      const phaseElapsed = calculateDuration(phaseStartRef.current, nowISO());
+      if (onBreak) {
+        snapshot.breakAcc += phaseElapsed;
+      } else if (currentPhase === 'first') {
+        snapshot.firstAcc += phaseElapsed;
+      } else {
+        snapshot.secondAcc += phaseElapsed;
+      }
+      // Update phaseStart to now so the next tick starts fresh from this moment
+      snapshot.phaseStart = nowISO();
+    }
+    try {
+      await updateSessionPhaseState(activeSession.id, JSON.stringify(snapshot));
+    } catch (err) {
+      console.error('Failed to save phase state:', err);
+    }
+  }, [activeSession, currentPhase, onBreak]);
+
+  // Ref to savePhaseState so the cleanup effect always sees the latest
+  const savePhaseStateRef = useRef(savePhaseState);
+  savePhaseStateRef.current = savePhaseState;
+
+  // Restore active session on mount / baby switch
   useEffect(() => {
-    if (!babyId) return;
-    restoreSession();
-    loadSuggestedBreast();
+    if (!babyId) {
+      // Clear UI state when no baby
+      setIsFeeding(false);
+      setActiveSession(null);
+      setElapsed(0);
+      setFirstElapsed(0);
+      setSecondElapsed(0);
+      setBreakElapsed(0);
+      setCurrentPhase('first');
+      setOnBreak(false);
+      return;
+    }
+
+    // Save outgoing baby's state before loading new baby
+    savePhaseStateRef.current().then(() => {
+      restoreSession();
+      loadSuggestedBreast();
+    });
   }, [babyId]);
 
   // Timer effect
@@ -126,6 +188,30 @@ export function useFeedingSession(babyId: string | null) {
         };
         setActiveSession(active);
         setIsFeeding(true);
+
+        // Try to restore full phase state from DB
+        if (session.phase_state) {
+          try {
+            const snap: PhaseStateSnapshot = JSON.parse(session.phase_state);
+            setCurrentPhase(snap.currentPhase);
+            setOnBreak(snap.onBreak);
+            phasesRef.current = snap.phases;
+            phaseStartRef.current = snap.phaseStart;
+            firstAccRef.current = snap.firstAcc;
+            secondAccRef.current = snap.secondAcc;
+            breakAccRef.current = snap.breakAcc;
+            setFirstElapsed(snap.firstAcc);
+            setSecondElapsed(snap.secondAcc);
+            setBreakElapsed(snap.breakAcc);
+            setElapsed(snap.firstAcc + snap.secondAcc);
+            setStatusMessage('FEEDING IN PROGRESS');
+            return;
+          } catch {
+            // Fallback to basic restore
+          }
+        }
+
+        // Basic restore (no phase state saved yet)
         setCurrentPhase('first');
         setOnBreak(false);
         phasesRef.current = [{ type: 'first', startTime: session.start_time }];
@@ -137,9 +223,42 @@ export function useFeedingSession(babyId: string | null) {
         const start = new Date(session.start_time).getTime();
         setElapsed(Math.floor((Date.now() - start) / 1000));
         setFirstElapsed(Math.floor((Date.now() - start) / 1000));
+      } else {
+        // No active session for this baby — clear state
+        setIsFeeding(false);
+        setActiveSession(null);
+        setElapsed(0);
+        setFirstElapsed(0);
+        setSecondElapsed(0);
+        setBreakElapsed(0);
+        setCurrentPhase('first');
+        setOnBreak(false);
+        phasesRef.current = [];
+        phaseStartRef.current = null;
+        firstAccRef.current = 0;
+        secondAccRef.current = 0;
+        breakAccRef.current = 0;
       }
     } catch (err) {
       console.error('Failed to restore session:', err);
+    }
+  };
+
+  // Quick persist of current refs to DB (call after mutations)
+  const persistPhaseState = async (sessionId: string, phase: FeedingPhase, isOnBreak: boolean) => {
+    const snapshot: PhaseStateSnapshot = {
+      currentPhase: phase,
+      onBreak: isOnBreak,
+      phases: phasesRef.current,
+      phaseStart: phaseStartRef.current,
+      firstAcc: firstAccRef.current,
+      secondAcc: secondAccRef.current,
+      breakAcc: breakAccRef.current,
+    };
+    try {
+      await updateSessionPhaseState(sessionId, JSON.stringify(snapshot));
+    } catch (err) {
+      console.error('Failed to persist phase state:', err);
     }
   };
 
@@ -170,6 +289,7 @@ export function useFeedingSession(babyId: string | null) {
       phaseStartRef.current = startTime;
       setStatusMessage('FEEDING STARTED');
       setElapsed(0);
+      await persistPhaseState(id, 'first', false);
     } catch (err) {
       console.error('Failed to start session:', err);
     }
@@ -246,7 +366,7 @@ export function useFeedingSession(babyId: string | null) {
   }, [activeSession, currentPhase, onBreak]);
 
   const switchBreast = useCallback(() => {
-    if (!isFeeding) return;
+    if (!isFeeding || !activeSession) return;
 
     const switchTime = nowISO();
     const newPhase: FeedingPhase = currentPhase === 'first' ? 'second' : 'first';
@@ -255,6 +375,7 @@ export function useFeedingSession(babyId: string | null) {
       // During break: just flip the breast label, break phase stays open.
       // When "Continue Feeding" is tapped, it will resume on the new breast.
       setCurrentPhase(newPhase);
+      persistPhaseState(activeSession.id, newPhase, true);
       return;
     }
 
@@ -275,10 +396,11 @@ export function useFeedingSession(babyId: string | null) {
     setCurrentPhase(newPhase);
     phasesRef.current.push({ type: newPhase, startTime: switchTime });
     phaseStartRef.current = switchTime;
-  }, [isFeeding, onBreak, currentPhase]);
+    persistPhaseState(activeSession.id, newPhase, false);
+  }, [isFeeding, onBreak, currentPhase, activeSession]);
 
   const toggleBreak = useCallback(() => {
-    if (!isFeeding) return;
+    if (!isFeeding || !activeSession) return;
 
     const breakTime = nowISO();
 
@@ -299,6 +421,7 @@ export function useFeedingSession(babyId: string | null) {
       setOnBreak(true);
       phasesRef.current.push({ type: 'break', startTime: breakTime });
       phaseStartRef.current = breakTime;
+      persistPhaseState(activeSession.id, currentPhase, true);
     } else {
       // End break — close break phase, resume current breast
       if (phaseStartRef.current) {
@@ -311,8 +434,9 @@ export function useFeedingSession(babyId: string | null) {
       setOnBreak(false);
       phasesRef.current.push({ type: currentPhase, startTime: breakTime });
       phaseStartRef.current = breakTime;
+      persistPhaseState(activeSession.id, currentPhase, false);
     }
-  }, [isFeeding, onBreak, currentPhase]);
+  }, [isFeeding, onBreak, currentPhase, activeSession]);
 
   const toggleFeeding = useCallback(async () => {
     if (isFeeding) {
