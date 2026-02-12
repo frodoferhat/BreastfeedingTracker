@@ -151,14 +151,14 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
             <View style={styles.phaseBreakdown}>
               <View style={styles.phaseRow}>
                 <View style={[styles.phaseDot, { backgroundColor: '#2A9D8F' }]} />
-                <Text style={[styles.phaseLabel, { color: colors.text }]}>1st Breast</Text>
+                <Text style={[styles.phaseLabel, { color: colors.text }]}>Left Breast</Text>
                 <Text style={[styles.phaseDuration, { color: '#2A9D8F' }]}>
                   {formatPhaseDuration(session.firstBreastDuration)}
                 </Text>
               </View>
               <View style={styles.phaseRow}>
                 <View style={[styles.phaseDot, { backgroundColor: '#9B5DE5' }]} />
-                <Text style={[styles.phaseLabel, { color: colors.text }]}>2nd Breast</Text>
+                <Text style={[styles.phaseLabel, { color: colors.text }]}>Right Breast</Text>
                 <Text style={[styles.phaseDuration, { color: '#9B5DE5' }]}>
                   {formatPhaseDuration(session.secondBreastDuration)}
                 </Text>

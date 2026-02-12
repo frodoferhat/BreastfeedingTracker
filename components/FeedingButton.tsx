@@ -8,6 +8,7 @@ import {
   Animated,
   PanResponder,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { FeedingPhase } from '../types';
 
@@ -67,6 +68,7 @@ export default function FeedingButton({
       }),
       onPanResponderRelease: (_, g) => {
         if (Math.abs(g.dx) > SWIPE_THRESHOLD && onSwitchRef.current && isFeedingRef.current) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           doFlip();
           onSwitchRef.current();
         }
@@ -95,7 +97,7 @@ export default function FeedingButton({
 
   const getBreastLabel = () => {
     if (!isFeeding) return null;
-    return currentPhase === 'first' ? '1ST BREAST' : '2ND BREAST';
+    return currentPhase === 'first' ? 'LEFT BREAST' : 'RIGHT BREAST';
   };
 
   const flipInterpolate = flipAnim.interpolate({
@@ -118,7 +120,10 @@ export default function FeedingButton({
       }}
     >
       <TouchableOpacity
-        onPress={onPress}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          onPress();
+        }}
         activeOpacity={0.8}
         style={[
           styles.button,

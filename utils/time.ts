@@ -33,22 +33,29 @@ export function formatDurationMMSS(seconds: number): string {
 /**
  * Format ISO datetime string to local time (HH:mm:ss — e.g. 14:02:35)
  */
+/**
+ * Safely parse a date string that may use 'T' or ' ' as separator
+ */
+function safeParseISO(dateStr: string): Date {
+  return parseISO(dateStr.replace(' ', 'T'));
+}
+
 export function formatTime(isoString: string): string {
-  return format(parseISO(isoString), 'HH:mm:ss');
+  return format(safeParseISO(isoString), 'HH:mm');
 }
 
 /**
  * Format ISO datetime string to local time with seconds (HH:mm:ss)
  */
 export function formatTimeWithSeconds(isoString: string): string {
-  return format(parseISO(isoString), 'HH:mm:ss');
+  return format(safeParseISO(isoString), 'HH:mm:ss');
 }
 
 /**
  * Format ISO date string to display format (e.g. "12-02-2026")
  */
 export function formatDateDisplay(isoString: string): string {
-  return format(parseISO(isoString), 'dd-MM-yyyy');
+  return format(safeParseISO(isoString), 'dd-MM-yyyy');
 }
 
 /**

@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
-import { getSessionsByBabyAndDateRange } from '../database';
+import { getSessionsByBabyAndDateRange, getDiaperLogsByBabyAndDateRange } from '../database';
 import { exportToCSV } from '../utils/export';
-import { FeedingSession } from '../types';
+import { FeedingSession, DiaperLog } from '../types';
 import { format, subDays } from 'date-fns';
 
 export default function ExportScreen() {
@@ -89,13 +89,26 @@ export default function ExportScreen() {
         createdAt: r.created_at,
       }));
 
-      if (sessions.length === 0) {
-        Alert.alert('No Data', 'No feeding sessions found in the selected date range.');
+      // Fetch diaper logs for the same date range
+      const diaperRows = await getDiaperLogsByBabyAndDateRange(
+        selectedBaby.id,
+        toISODate(startDate),
+        toISODate(endDate)
+      );
+      const diaperLogs: DiaperLog[] = diaperRows.map((r: any) => ({
+        id: r.id,
+        babyId: r.baby_id,
+        type: r.type,
+        createdAt: r.created_at,
+      }));
+
+      if (sessions.length === 0 && diaperLogs.length === 0) {
+        Alert.alert('No Data', 'No feeding sessions or diaper changes found in the selected date range.');
         setLoading(false);
         return;
       }
 
-      await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate));
+      await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
     } catch (err) {
       console.error('Export failed:', err);
       Alert.alert('Error', 'Failed to export data. Please try again.');

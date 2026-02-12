@@ -57,6 +57,12 @@ function RootLayoutNav() {
             title: 'Export Data',
           }}
         />
+        <Stack.Screen
+          name="diaper-logs"
+          options={{
+            title: 'Diaper Changes',
+          }}
+        />
       </Stack>
     </>
   );

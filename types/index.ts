@@ -2,6 +2,29 @@ export type BabyGender = 'boy' | 'girl' | undefined;
 
 export type FeedingPhase = 'first' | 'break' | 'second';
 
+export type DiaperType = 'pee' | 'poop' | 'both';
+
+export interface DiaperLog {
+  id: string;
+  babyId: string;
+  type: DiaperType;
+  createdAt: string; // ISO datetime string
+}
+
+export interface DiaperDayStats {
+  date: string;
+  totalPee: number;
+  totalPoop: number;
+  total: number;
+}
+
+export interface DiaperWeekStats {
+  totalPee: number;
+  totalPoop: number;
+  total: number;
+  avgPerDay: number;
+}
+
 export interface PhaseEntry {
   type: FeedingPhase;
   startTime: string; // ISO

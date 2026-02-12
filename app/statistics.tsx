@@ -4,14 +4,15 @@ import {
   Text,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import StatsSummary from '../components/StatsSummary';
-import { getDayStats, getWeekStats } from '../database';
+import { getDayStats, getWeekStats, getDiaperDayStats, getDiaperWeekStats } from '../database';
 import { getTodayDate, formatDateDisplay } from '../utils/time';
-import { DayStatistics } from '../types';
+import { DayStatistics, DiaperDayStats, DiaperWeekStats } from '../types';
 import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
 
 export default function StatisticsScreen() {
@@ -21,6 +22,9 @@ export default function StatisticsScreen() {
   const [todayStats, setTodayStats] = useState<DayStatistics | null>(null);
   const [weekStats, setWeekStats] = useState<DayStatistics | null>(null);
   const [yesterdayStats, setYesterdayStats] = useState<DayStatistics | null>(null);
+  const [todayDiaper, setTodayDiaper] = useState<DiaperDayStats | null>(null);
+  const [yesterdayDiaper, setYesterdayDiaper] = useState<DiaperDayStats | null>(null);
+  const [weekDiaper, setWeekDiaper] = useState<DiaperWeekStats | null>(null);
 
   useEffect(() => {
     if (selectedBaby) {
@@ -75,6 +79,40 @@ export default function StatisticsScreen() {
           shortestSession: 0,
         });
       }
+
+      // Diaper stats - today
+      const todayDiaperRow = await getDiaperDayStats(selectedBaby.id, today);
+      if (todayDiaperRow) {
+        setTodayDiaper({
+          date: today,
+          totalPee: todayDiaperRow.total_pee ?? 0,
+          totalPoop: todayDiaperRow.total_poop ?? 0,
+          total: todayDiaperRow.total ?? 0,
+        });
+      }
+
+      // Diaper stats - yesterday
+      const yesterdayDiaperRow = await getDiaperDayStats(selectedBaby.id, yesterday);
+      if (yesterdayDiaperRow) {
+        setYesterdayDiaper({
+          date: yesterday,
+          totalPee: yesterdayDiaperRow.total_pee ?? 0,
+          totalPoop: yesterdayDiaperRow.total_poop ?? 0,
+          total: yesterdayDiaperRow.total ?? 0,
+        });
+      }
+
+      // Diaper stats - week
+      const weekDiaperRow = await getDiaperWeekStats(selectedBaby.id, weekStart, weekEnd);
+      if (weekDiaperRow) {
+        const days = 7;
+        setWeekDiaper({
+          totalPee: weekDiaperRow.total_pee ?? 0,
+          totalPoop: weekDiaperRow.total_poop ?? 0,
+          total: weekDiaperRow.total ?? 0,
+          avgPerDay: Math.round((weekDiaperRow.total ?? 0) / days * 10) / 10,
+        });
+      }
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
@@ -124,7 +162,120 @@ export default function StatisticsScreen() {
           stats={weekStats}
           title={'\uD83D\uDCCA This Week'}
         />
+
+        {/* Diaper Statistics */}
+        <View style={styles.sectionDivider}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>🧷 Diaper Changes</Text>
+        </View>
+
+        <DiaperStatsCard
+          title={`📅 Today — ${formatDateDisplay(getTodayDate())}`}
+          stats={todayDiaper}
+          colors={colors}
+          onTotalPress={() => router.push('/diaper-logs')}
+        />
+
+        <DiaperStatsCard
+          title={`📅 Yesterday — ${formatDateDisplay(yesterday)}`}
+          stats={yesterdayDiaper}
+          colors={colors}
+          onTotalPress={() => router.push('/diaper-logs')}
+        />
+
+        <DiaperWeekStatsCard
+          stats={weekDiaper}
+          colors={colors}
+        />
       </ScrollView>
+    </View>
+  );
+}
+
+// ─── Diaper Stats Card (Day) ─────────────────────────────
+
+function DiaperStatsCard({ title, stats, colors, onTotalPress }: { title: string; stats: DiaperDayStats | null; colors: any; onTotalPress?: () => void }) {
+  if (!stats || stats.total === 0) {
+    return (
+      <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.diaperCardTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.diaperCardEmpty, { color: colors.textSecondary }]}>
+          No diaper changes recorded
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.diaperCardTitle, { color: colors.text }]}>{title}</Text>
+      <View style={styles.diaperStatsRow}>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>💧</Text>
+          <Text style={[styles.diaperStatValue, { color: '#3B82F6' }]}>{stats.totalPee}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Pee</Text>
+        </View>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>💩</Text>
+          <Text style={[styles.diaperStatValue, { color: '#92400E' }]}>{stats.totalPoop}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Poop</Text>
+        </View>
+        <TouchableOpacity
+          onPress={onTotalPress}
+          style={[styles.diaperStatItem, { backgroundColor: colors.background, borderWidth: onTotalPress ? 1.5 : 0, borderColor: colors.primary }]}
+          activeOpacity={0.7}
+          disabled={!onTotalPress}
+        >
+          <Text style={styles.diaperStatEmoji}>🧷</Text>
+          <Text style={[styles.diaperStatValue, { color: onTotalPress ? colors.primary : colors.text }]}>{stats.total}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
+          {onTotalPress && (
+            <Text style={[styles.diaperTapHint, { color: colors.primary }]}>View ›</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ─── Diaper Stats Card (Week) ────────────────────────────
+
+function DiaperWeekStatsCard({ stats, colors }: { stats: DiaperWeekStats | null; colors: any }) {
+  if (!stats || stats.total === 0) {
+    return (
+      <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.diaperCardTitle, { color: colors.text }]}>📊 This Week</Text>
+        <Text style={[styles.diaperCardEmpty, { color: colors.textSecondary }]}>
+          No diaper changes recorded
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.diaperCardTitle, { color: colors.text }]}>📊 This Week</Text>
+      <View style={styles.diaperStatsRow}>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>💧</Text>
+          <Text style={[styles.diaperStatValue, { color: '#3B82F6' }]}>{stats.totalPee}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Pee</Text>
+        </View>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>💩</Text>
+          <Text style={[styles.diaperStatValue, { color: '#92400E' }]}>{stats.totalPoop}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Poop</Text>
+        </View>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>🧷</Text>
+          <Text style={[styles.diaperStatValue, { color: colors.text }]}>{stats.total}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
+        </View>
+        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
+          <Text style={styles.diaperStatEmoji}>📈</Text>
+          <Text style={[styles.diaperStatValue, { color: colors.text }]}>{stats.avgPerDay}</Text>
+          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Avg/Day</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -152,5 +303,59 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+  },
+  sectionDivider: {
+    marginTop: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  diaperCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  diaperCardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  diaperCardEmpty: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  diaperStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  diaperStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  diaperStatEmoji: {
+    fontSize: 24,
+  },
+  diaperStatValue: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  diaperStatLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  diaperTapHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

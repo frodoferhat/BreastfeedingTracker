@@ -35,6 +35,17 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
 
     CREATE INDEX IF NOT EXISTS idx_sessions_baby_id ON feeding_sessions(baby_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON feeding_sessions(start_time);
+
+    CREATE TABLE IF NOT EXISTS diaper_logs (
+      id TEXT PRIMARY KEY NOT NULL,
+      baby_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (baby_id) REFERENCES babies(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_diaper_baby_id ON diaper_logs(baby_id);
+    CREATE INDEX IF NOT EXISTS idx_diaper_created_at ON diaper_logs(created_at);
   `);
 
   // Migration: add gender column if it doesn't exist
@@ -225,5 +236,81 @@ export async function getLastCompletedSession(babyId: string): Promise<any | nul
      WHERE baby_id = ? AND end_time IS NOT NULL
      ORDER BY start_time DESC LIMIT 1`,
     [babyId]
+  );
+}
+
+// ─── Diaper CRUD ─────────────────────────────────────────────
+
+export async function insertDiaperLog(
+  id: string,
+  babyId: string,
+  type: string
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO diaper_logs (id, baby_id, type) VALUES (?, ?, ?)',
+    [id, babyId, type]
+  );
+}
+
+export async function deleteDiaperLog(id: string): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM diaper_logs WHERE id = ?', [id]);
+}
+
+export async function getDiaperLogsByBabyAndDate(
+  babyId: string,
+  date: string
+): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT * FROM diaper_logs
+     WHERE baby_id = ? AND date(created_at) = ?
+     ORDER BY created_at DESC`,
+    [babyId, date]
+  );
+}
+
+export async function getDiaperLogsByBabyAndDateRange(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT * FROM diaper_logs
+     WHERE baby_id = ? AND date(created_at) >= ? AND date(created_at) <= ?
+     ORDER BY created_at DESC`,
+    [babyId, startDate, endDate]
+  );
+}
+
+export async function getDiaperDayStats(babyId: string, date: string): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       COUNT(*) as total,
+       SUM(CASE WHEN type = 'pee' OR type = 'both' THEN 1 ELSE 0 END) as total_pee,
+       SUM(CASE WHEN type = 'poop' OR type = 'both' THEN 1 ELSE 0 END) as total_poop
+     FROM diaper_logs
+     WHERE baby_id = ? AND date(created_at) = ?`,
+    [babyId, date]
+  );
+}
+
+export async function getDiaperWeekStats(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       COUNT(*) as total,
+       SUM(CASE WHEN type = 'pee' OR type = 'both' THEN 1 ELSE 0 END) as total_pee,
+       SUM(CASE WHEN type = 'poop' OR type = 'both' THEN 1 ELSE 0 END) as total_poop
+     FROM diaper_logs
+     WHERE baby_id = ? AND date(created_at) >= ? AND date(created_at) <= ?`,
+    [babyId, startDate, endDate]
   );
 }

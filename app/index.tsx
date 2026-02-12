@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import { useFeedingSession } from '../hooks/useFeedingSession';
@@ -17,6 +18,7 @@ import ReminderPopup from '../components/ReminderPopup';
 import BabySelector from '../components/BabySelector';
 import AddBabyModal from '../components/AddBabyModal';
 import AudioNoteRecorder from '../components/AudioNoteRecorder';
+import DiaperLogModal from '../components/DiaperLogModal';
 import { scheduleFeedingReminder } from '../utils/notifications';
 import { updateSessionAudioNote } from '../database';
 
@@ -49,6 +51,7 @@ export default function HomeScreen() {
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const [showAddBaby, setShowAddBaby] = useState(false);
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
+  const [showDiaper, setShowDiaper] = useState(false);
 
   const handleFeedingToggle = useCallback(async () => {
     if (!selectedBaby) {
@@ -123,14 +126,22 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={toggleTheme}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowDiaper(true);
+          }}
           style={[styles.calendarButton, { backgroundColor: colors.surface }]}
         >
+          <Text style={styles.headerIcon}>🧷</Text>
+          <Text style={[styles.calendarButtonText, { color: colors.text }]}>Diaper</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={toggleTheme}
+          style={[styles.headerButton, { backgroundColor: colors.surface }]}
+        >
           <Text style={styles.headerIcon}>
-            {mode === 'light' ? '\uD83C\uDF19' : '\u2600\uFE0F'}
-          </Text>
-          <Text style={[styles.calendarButtonText, { color: colors.text }]}>
-            {mode === 'light' ? 'Dark Mode' : 'Light Mode'}
+            {mode === 'light' ? '\uD83C\uDF19' : '\uD83C\uDF1E'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -159,7 +170,7 @@ export default function HomeScreen() {
                 { color: suggestedBreast === 'first' ? '#2A9D8F' : '#9B5DE5' },
               ]}
             >
-              {suggestedBreast === 'first' ? '🟢 Start with 1st Breast' : '🟣 Start with 2nd Breast'}
+              {suggestedBreast === 'first' ? '🟢 Start with Left Breast' : '🟣 Start with Right Breast'}
             </Text>
           ) : (
             <Text style={[styles.statusMessage, { opacity: 0 }]}>
@@ -181,7 +192,10 @@ export default function HomeScreen() {
           {isFeeding ? (
             <>
               <TouchableOpacity
-                onPress={toggleBreak}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  toggleBreak();
+                }}
                 style={[
                   styles.breakButton,
                   {
@@ -203,16 +217,16 @@ export default function HomeScreen() {
                 </Text>
               </View>
 
-              {/* 1st & 2nd breast timers side by side */}
+              {/* Left & Right breast timers side by side */}
               <View style={styles.breastTimersRow}>
                 <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.breastTimerLabel, { color: '#2A9D8F' }]}>1st</Text>
+                  <Text style={[styles.breastTimerLabel, { color: '#2A9D8F' }]}>Left</Text>
                   <Text style={[styles.breastTimerValue, { color: '#2A9D8F' }]}>
                     {formatMM_SS(firstElapsed)}
                   </Text>
                 </View>
                 <View style={[styles.breastTimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.breastTimerLabel, { color: '#9B5DE5' }]}>2nd</Text>
+                  <Text style={[styles.breastTimerLabel, { color: '#9B5DE5' }]}>Right</Text>
                   <Text style={[styles.breastTimerValue, { color: '#9B5DE5' }]}>
                     {formatMM_SS(secondElapsed)}
                   </Text>
@@ -247,6 +261,12 @@ export default function HomeScreen() {
         visible={showAudioRecorder}
         onRecorded={handleAudioRecorded}
         onCancel={handleSkipAudio}
+      />
+
+      {/* Diaper Log Modal */}
+      <DiaperLogModal
+        visible={showDiaper}
+        onClose={() => setShowDiaper(false)}
       />
 
       {/* Bottom Navigation */}
@@ -300,6 +320,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
+    gap: 8,
   },
   headerButton: {
     width: 44,

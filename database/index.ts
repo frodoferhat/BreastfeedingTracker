@@ -15,4 +15,10 @@ export {
   getWeekStats,
   getActiveSession,
   getLastCompletedSession,
+  insertDiaperLog,
+  deleteDiaperLog,
+  getDiaperLogsByBabyAndDate,
+  getDiaperLogsByBabyAndDateRange,
+  getDiaperDayStats,
+  getDiaperWeekStats,
 } from './db';
