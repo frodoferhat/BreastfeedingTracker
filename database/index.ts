@@ -25,4 +25,6 @@ export {
   getDiaperWeekStats,
   getBottleDayStats,
   getBottleWeekStats,
+  getFirstSessionDate,
+  getDailyStatsForRange,
 } from './db';

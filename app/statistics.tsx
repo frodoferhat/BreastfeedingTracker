@@ -1,19 +1,60 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
 import StatsSummary from '../components/StatsSummary';
-import { getDayStats, getWeekStats, getDiaperDayStats, getDiaperWeekStats, getBottleDayStats, getBottleWeekStats } from '../database';
-import { getTodayDate, formatDateDisplay } from '../utils/time';
+import {
+  getDayStats, getWeekStats,
+  getDiaperDayStats, getDiaperWeekStats,
+  getBottleDayStats, getBottleWeekStats,
+  getFirstSessionDate, getDailyStatsForRange,
+} from '../database';
+import { getTodayDate, formatDateDisplay, formatDurationHuman } from '../utils/time';
 import { DayStatistics, DiaperDayStats, DiaperWeekStats, BottleDayStats, BottleWeekStats } from '../types';
-import { format, subDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, subMonths, isBefore, parseISO } from 'date-fns';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// ─── History types ───────────────────────────────────────────
+
+interface WeekHistoryItem {
+  label: string;       // e.g. "Feb 2 – 8"
+  startDate: string;   // yyyy-MM-dd
+  endDate: string;     // yyyy-MM-dd
+  totalFeedings: number;
+  totalDuration: number;
+  avgPerDay: number;
+  days: DayRow[];
+}
+
+interface DayRow {
+  date: string;        // yyyy-MM-dd
+  label: string;       // e.g. "Mon Feb 2"
+  totalFeedings: number;
+  totalDuration: number;
+}
+
+interface MonthHistoryItem {
+  label: string;       // e.g. "January 2026"
+  yearMonth: string;   // yyyy-MM
+  totalFeedings: number;
+  totalDuration: number;
+  avgPerDay: number;
+  weeks: WeekHistoryItem[];
+}
 
 export default function StatisticsScreen() {
   const { colors } = useTheme();
@@ -29,9 +70,26 @@ export default function StatisticsScreen() {
   const [yesterdayBottle, setYesterdayBottle] = useState<BottleDayStats | null>(null);
   const [weekBottle, setWeekBottle] = useState<BottleWeekStats | null>(null);
 
+  // History state
+  const [previousWeeks, setPreviousWeeks] = useState<WeekHistoryItem[]>([]);
+  const [months, setMonths] = useState<MonthHistoryItem[]>([]);
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [expandedMonthWeeks, setExpandedMonthWeeks] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (key: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (selectedBaby) {
       loadStats();
+      loadHistory();
     }
   }, [selectedBaby]);
 
@@ -156,6 +214,133 @@ export default function StatisticsScreen() {
     }
   };
 
+  const loadHistory = async () => {
+    if (!selectedBaby) return;
+    try {
+      const firstDate = await getFirstSessionDate(selectedBaby.id);
+      if (!firstDate) return;
+
+      const now = new Date();
+      const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+
+      // ── Previous 3 weeks ──
+      const prevWeeks: WeekHistoryItem[] = [];
+      for (let i = 1; i <= 3; i++) {
+        const ws = subWeeks(currentWeekStart, i);
+        const we = endOfWeek(ws, { weekStartsOn: 1 });
+        const wsStr = format(ws, 'yyyy-MM-dd');
+        const weStr = format(we, 'yyyy-MM-dd');
+
+        if (isBefore(parseISO(firstDate), we) || firstDate <= weStr) {
+          const weekRow = await getWeekStats(selectedBaby.id, wsStr, weStr);
+          const dailyRows = await getDailyStatsForRange(selectedBaby.id, wsStr, weStr);
+          const totalFeedings = weekRow?.total_feedings ?? 0;
+          const totalDuration = weekRow?.total_duration ?? 0;
+
+          if (totalFeedings > 0) {
+            const days: DayRow[] = dailyRows.map((r: any) => ({
+              date: r.date,
+              label: format(parseISO(r.date), 'EEE MMM d'),
+              totalFeedings: r.total_feedings,
+              totalDuration: r.total_duration,
+            }));
+
+            prevWeeks.push({
+              label: `${format(ws, 'MMM d')} \u2013 ${format(we, 'MMM d')}`,
+              startDate: wsStr,
+              endDate: weStr,
+              totalFeedings,
+              totalDuration,
+              avgPerDay: Math.round(totalFeedings / 7 * 10) / 10,
+              days,
+            });
+          }
+        }
+      }
+      setPreviousWeeks(prevWeeks);
+
+      // ── Monthly history (older than 4 weeks) ──
+      const fourWeeksAgo = subWeeks(currentWeekStart, 4);
+      const firstDateParsed = parseISO(firstDate);
+      const monthsList: MonthHistoryItem[] = [];
+
+      let cursor = startOfMonth(fourWeeksAgo);
+      const firstMonth = startOfMonth(firstDateParsed);
+
+      while (!isBefore(cursor, firstMonth)) {
+        const monthStart = cursor;
+        const monthEnd = endOfMonth(cursor);
+        const msStr = format(monthStart, 'yyyy-MM-dd');
+        const meStr = format(monthEnd, 'yyyy-MM-dd');
+
+        const monthRow = await getWeekStats(selectedBaby.id, msStr, meStr);
+        const totalFeedings = monthRow?.total_feedings ?? 0;
+        const totalDuration = monthRow?.total_duration ?? 0;
+
+        if (totalFeedings > 0) {
+          // Build weeks inside this month
+          const monthWeeks: WeekHistoryItem[] = [];
+          let weekCursor = startOfWeek(monthStart, { weekStartsOn: 1 });
+          if (isBefore(weekCursor, monthStart)) weekCursor = monthStart;
+
+          while (isBefore(weekCursor, monthEnd) || format(weekCursor, 'yyyy-MM-dd') <= meStr) {
+            const wStart = weekCursor;
+            const wEnd = endOfWeek(weekCursor, { weekStartsOn: 1 });
+            // Clamp to month boundaries
+            const clampedStart = isBefore(wStart, monthStart) ? monthStart : wStart;
+            const clampedEnd = isBefore(monthEnd, wEnd) ? monthEnd : wEnd;
+            const cwsStr = format(clampedStart, 'yyyy-MM-dd');
+            const cweStr = format(clampedEnd, 'yyyy-MM-dd');
+
+            const wRow = await getWeekStats(selectedBaby.id, cwsStr, cweStr);
+            const wFeedings = wRow?.total_feedings ?? 0;
+
+            if (wFeedings > 0) {
+              const dailyRows = await getDailyStatsForRange(selectedBaby.id, cwsStr, cweStr);
+              const days: DayRow[] = dailyRows.map((r: any) => ({
+                date: r.date,
+                label: format(parseISO(r.date), 'EEE MMM d'),
+                totalFeedings: r.total_feedings,
+                totalDuration: r.total_duration,
+              }));
+
+              const numDays = Math.max(1, Math.round((clampedEnd.getTime() - clampedStart.getTime()) / 86400000) + 1);
+              monthWeeks.push({
+                label: `${format(clampedStart, 'MMM d')} \u2013 ${format(clampedEnd, 'MMM d')}`,
+                startDate: cwsStr,
+                endDate: cweStr,
+                totalFeedings: wFeedings,
+                totalDuration: wRow?.total_duration ?? 0,
+                avgPerDay: Math.round(wFeedings / numDays * 10) / 10,
+                days,
+              });
+            }
+
+            weekCursor = subWeeks(weekCursor, -1); // next week
+            weekCursor = startOfWeek(weekCursor, { weekStartsOn: 1 });
+            if (format(weekCursor, 'yyyy-MM-dd') > meStr) break;
+          }
+
+          const numDaysInMonth = Math.round((monthEnd.getTime() - monthStart.getTime()) / 86400000) + 1;
+          monthsList.push({
+            label: format(monthStart, 'MMMM yyyy'),
+            yearMonth: format(monthStart, 'yyyy-MM'),
+            totalFeedings,
+            totalDuration,
+            avgPerDay: Math.round(totalFeedings / numDaysInMonth * 10) / 10,
+            weeks: monthWeeks,
+          });
+        }
+
+        cursor = subMonths(cursor, 1);
+        cursor = startOfMonth(cursor);
+      }
+      setMonths(monthsList);
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    }
+  };
+
   if (!selectedBaby) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -246,6 +431,124 @@ export default function StatisticsScreen() {
           stats={weekBottle}
           colors={colors}
         />
+
+        {/* ─── Previous Weeks ─────────────────────────── */}
+        {previousWeeks.length > 0 && (
+          <>
+            <View style={styles.sectionDivider}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>📂 Previous Weeks</Text>
+            </View>
+            {previousWeeks.map((week) => (
+              <View key={week.startDate} style={[styles.historyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={styles.historyHeader}
+                  activeOpacity={0.6}
+                  onPress={() => toggleExpand(week.startDate, setExpandedWeeks)}
+                >
+                  <View style={styles.historyHeaderLeft}>
+                    <Text style={[styles.historyHeaderTitle, { color: colors.text }]}>{week.label}</Text>
+                    <Text style={[styles.historyHeaderSub, { color: colors.textSecondary }]}>
+                      {week.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(week.totalDuration)} {'\u00B7'} {week.avgPerDay}/day
+                    </Text>
+                  </View>
+                  <Text style={[styles.chevron, { color: colors.textSecondary }]}>
+                    {expandedWeeks.has(week.startDate) ? '\u25B2' : '\u25BC'}
+                  </Text>
+                </TouchableOpacity>
+                {expandedWeeks.has(week.startDate) && (
+                  <View style={[styles.dayList, { borderTopColor: colors.border }]}>
+                    {week.days.map((day) => (
+                      <TouchableOpacity
+                        key={day.date}
+                        style={[styles.dayRow, { borderBottomColor: colors.border }]}
+                        activeOpacity={0.6}
+                        onPress={() => goToCalendar(day.date)}
+                      >
+                        <Text style={[styles.dayLabel, { color: colors.text }]}>{day.label}</Text>
+                        <Text style={[styles.dayStat, { color: colors.textSecondary }]}>
+                          {day.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(day.totalDuration)}
+                        </Text>
+                        <Text style={[styles.dayArrow, { color: colors.primary }]}>{'\u203A'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {week.days.length === 0 && (
+                      <Text style={[styles.emptyDayText, { color: colors.textSecondary }]}>No feeds this week</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* ─── Monthly History ────────────────────────── */}
+        {months.length > 0 && (
+          <>
+            <View style={styles.sectionDivider}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>📆 Monthly History</Text>
+            </View>
+            {months.map((month) => (
+              <View key={month.yearMonth} style={[styles.historyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={styles.historyHeader}
+                  activeOpacity={0.6}
+                  onPress={() => toggleExpand(month.yearMonth, setExpandedMonths)}
+                >
+                  <View style={styles.historyHeaderLeft}>
+                    <Text style={[styles.historyHeaderTitle, { color: colors.text }]}>{month.label}</Text>
+                    <Text style={[styles.historyHeaderSub, { color: colors.textSecondary }]}>
+                      {month.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(month.totalDuration)} {'\u00B7'} {month.avgPerDay}/day
+                    </Text>
+                  </View>
+                  <Text style={[styles.chevron, { color: colors.textSecondary }]}>
+                    {expandedMonths.has(month.yearMonth) ? '\u25B2' : '\u25BC'}
+                  </Text>
+                </TouchableOpacity>
+                {expandedMonths.has(month.yearMonth) && (
+                  <View style={[styles.dayList, { borderTopColor: colors.border }]}>
+                    {month.weeks.map((week) => (
+                      <View key={week.startDate}>
+                        <TouchableOpacity
+                          style={[styles.weekSubHeader, { borderBottomColor: colors.border }]}
+                          activeOpacity={0.6}
+                          onPress={() => toggleExpand(`${month.yearMonth}-${week.startDate}`, setExpandedMonthWeeks)}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.weekSubTitle, { color: colors.text }]}>{week.label}</Text>
+                            <Text style={[styles.weekSubStat, { color: colors.textSecondary }]}>
+                              {week.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(week.totalDuration)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.chevronSmall, { color: colors.textSecondary }]}>
+                            {expandedMonthWeeks.has(`${month.yearMonth}-${week.startDate}`) ? '\u25B2' : '\u25BC'}
+                          </Text>
+                        </TouchableOpacity>
+                        {expandedMonthWeeks.has(`${month.yearMonth}-${week.startDate}`) && (
+                          <View style={{ paddingLeft: 12 }}>
+                            {week.days.map((day) => (
+                              <TouchableOpacity
+                                key={day.date}
+                                style={[styles.dayRow, { borderBottomColor: colors.border }]}
+                                activeOpacity={0.6}
+                                onPress={() => goToCalendar(day.date)}
+                              >
+                                <Text style={[styles.dayLabel, { color: colors.text }]}>{day.label}</Text>
+                                <Text style={[styles.dayStat, { color: colors.textSecondary }]}>
+                                  {day.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(day.totalDuration)}
+                                </Text>
+                                <Text style={[styles.dayArrow, { color: colors.primary }]}>{'\u203A'}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -561,6 +864,84 @@ const styles = StyleSheet.create({
   },
   ratioCounts: {
     fontSize: 11,
+    fontWeight: '500',
+  },
+  // ─── History styles ────────────────────────────────────
+  historyCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  historyHeaderLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  historyHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  historyHeaderSub: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  chevron: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  chevronSmall: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  dayList: {
+    borderTopWidth: 1,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dayLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  dayStat: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  dayArrow: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  emptyDayText: {
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  weekSubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  weekSubTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  weekSubStat: {
+    fontSize: 12,
     fontWeight: '500',
   },
 });

@@ -380,3 +380,39 @@ export async function getBottleWeekStats(
     [babyId, startDate, endDate]
   );
 }
+
+// ─── History: first session date ─────────────────────────────
+
+export async function getFirstSessionDate(babyId: string): Promise<string | null> {
+  const database = await getDatabase();
+  const row: any = await database.getFirstAsync(
+    `SELECT date(start_time, 'localtime') as first_date
+     FROM feeding_sessions
+     WHERE baby_id = ? AND end_time IS NOT NULL
+     ORDER BY start_time ASC LIMIT 1`,
+    [babyId]
+  );
+  return row?.first_date ?? null;
+}
+
+// ─── History: per-day breakdown for a date range ─────────────
+
+export async function getDailyStatsForRange(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT
+       date(start_time, 'localtime') as date,
+       COUNT(*) as total_feedings,
+       COALESCE(SUM(duration), 0) as total_duration,
+       COALESCE(AVG(duration), 0) as avg_duration
+     FROM feeding_sessions
+     WHERE baby_id = ? AND date(start_time, 'localtime') >= ? AND date(start_time, 'localtime') <= ? AND end_time IS NOT NULL
+     GROUP BY date(start_time, 'localtime')
+     ORDER BY date(start_time, 'localtime') DESC`,
+    [babyId, startDate, endDate]
+  );
+}
