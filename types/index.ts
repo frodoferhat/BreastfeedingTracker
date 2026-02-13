@@ -6,6 +6,16 @@ export type FeedingMode = 'breast' | 'bottle';
 
 export type DiaperType = 'pee' | 'poop' | 'both';
 
+export interface GrowthRecord {
+  id: string;
+  babyId: string;
+  date: string;          // yyyy-MM-dd
+  weightKg: number | null;
+  heightCm: number | null;
+  headCm: number | null;
+  createdAt: string;     // ISO datetime string
+}
+
 export interface DiaperLog {
   id: string;
   babyId: string;

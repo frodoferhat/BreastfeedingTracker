@@ -28,4 +28,8 @@ export {
   getBottleWeekStats,
   getFirstSessionDate,
   getDailyStatsForRange,
+  insertGrowthRecord,
+  getGrowthRecordsByBaby,
+  getLatestGrowthRecord,
+  deleteGrowthRecord,
 } from './db';

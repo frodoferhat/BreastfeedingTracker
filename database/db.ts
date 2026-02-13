@@ -80,6 +80,22 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
   try {
     await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN note TEXT');
   } catch { /* already exists */ }
+
+  // ─── Growth records table ──────────────────────────────
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS growth_records (
+      id TEXT PRIMARY KEY NOT NULL,
+      baby_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      weight_kg REAL,
+      height_cm REAL,
+      head_cm REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (baby_id) REFERENCES babies(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_growth_baby_id ON growth_records(baby_id);
+    CREATE INDEX IF NOT EXISTS idx_growth_date ON growth_records(date);
+  `);
 }
 
 // ─── Baby CRUD ───────────────────────────────────────────────
@@ -429,4 +445,42 @@ export async function getDailyStatsForRange(
      ORDER BY date(start_time, 'localtime') DESC`,
     [babyId, startDate, endDate]
   );
+}
+
+// ─── Growth Records CRUD ─────────────────────────────────
+
+export async function insertGrowthRecord(
+  id: string,
+  babyId: string,
+  date: string,
+  weightKg: number | null,
+  heightCm: number | null,
+  headCm: number | null
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO growth_records (id, baby_id, date, weight_kg, height_cm, head_cm) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, babyId, date, weightKg, heightCm, headCm]
+  );
+}
+
+export async function getGrowthRecordsByBaby(babyId: string): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT * FROM growth_records WHERE baby_id = ? ORDER BY date DESC',
+    [babyId]
+  );
+}
+
+export async function getLatestGrowthRecord(babyId: string): Promise<any | null> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    'SELECT * FROM growth_records WHERE baby_id = ? ORDER BY date DESC LIMIT 1',
+    [babyId]
+  );
+}
+
+export async function deleteGrowthRecord(id: string): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM growth_records WHERE id = ?', [id]);
 }

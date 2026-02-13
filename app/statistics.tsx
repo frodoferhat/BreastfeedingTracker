@@ -369,6 +369,22 @@ export default function StatisticsScreen() {
           </Text>
         </View>
 
+        {/* Growth Tracking Button */}
+        <TouchableOpacity
+          style={[styles.growthButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          activeOpacity={0.7}
+          onPress={() => router.push('/growth')}
+        >
+          <Text style={styles.growthButtonEmoji}>📏</Text>
+          <View style={styles.growthButtonContent}>
+            <Text style={[styles.growthButtonTitle, { color: colors.text }]}>Baby Growth</Text>
+            <Text style={[styles.growthButtonSub, { color: colors.textSecondary }]}>
+              Track weight, height & head circumference
+            </Text>
+          </View>
+          <Text style={[styles.growthButtonArrow, { color: colors.primary }]}>{'\u203A'}</Text>
+        </TouchableOpacity>
+
         <StatsSummary
           stats={todayStats}
           title={`\uD83D\uDCC5 Today \u2014 ${formatDateDisplay(getTodayDate())}`}
@@ -640,6 +656,40 @@ const styles = StyleSheet.create({
   babyName: {
     fontSize: 22,
     fontWeight: '700',
+  },
+  growthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  growthButtonEmoji: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  growthButtonContent: {
+    flex: 1,
+    gap: 2,
+  },
+  growthButtonTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  growthButtonSub: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  growthButtonArrow: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,

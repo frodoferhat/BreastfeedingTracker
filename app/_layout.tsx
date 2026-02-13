@@ -63,6 +63,12 @@ function RootLayoutNav() {
             title: 'Diaper Changes',
           }}
         />
+        <Stack.Screen
+          name="growth"
+          options={{
+            title: 'Baby Growth',
+          }}
+        />
       </Stack>
     </>
   );
