@@ -45,6 +45,7 @@ export function generateReport(
     const rowBg = i % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
     const modeIcon = session.feedingMode === 'bottle' ? '🍼' : '🤱';
     const volumeStr = session.feedingMode === 'bottle' && session.volume != null ? `${session.volume}ml` : '\u2014';
+    const noteStr = session.note === 'good' ? '😊 Good' : session.note === 'okay' ? '😐 Okay' : session.note === 'poor' ? '😟 Poor' : session.note ? session.note : '\u2014';
 
     const sessionNum = sessions.length - i;
 
@@ -60,6 +61,7 @@ export function generateReport(
       <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;font-weight:700">${durationMin}</td>
       <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center;color:#E67E22;font-weight:600">${volumeStr}</td>
       <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;text-align:center">${audio}</td>
+      <td style="padding:${cellPad};border-bottom:1px solid #E2E8F0;font-size:11px;max-width:120px">${noteStr}</td>
     </tr>`;
   });
 
@@ -115,6 +117,7 @@ export function generateReport(
             <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Total</th>
             <th style="padding:${headPad};text-align:center;font-weight:700;color:#E67E22;border-bottom:2px solid #CBD5E1">Volume</th>
             <th style="padding:${headPad};text-align:center;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Audio</th>
+            <th style="padding:${headPad};text-align:left;font-weight:700;color:#475569;border-bottom:2px solid #CBD5E1">Note</th>
           </tr>
         </thead>
         <tbody>

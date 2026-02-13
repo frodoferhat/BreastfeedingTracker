@@ -70,6 +70,7 @@ export interface FeedingSession {
   breakDuration: number | null;
   phases: string | null; // JSON string of PhaseEntry[]
   audioNotePath: string | null; // file URI for audio note
+  note: string | null; // quick text note
   createdAt: string; // ISO datetime string
 }
 

@@ -117,6 +117,7 @@ export default function CalendarScreen() {
         breakDuration: r.break_duration,
         phases: r.phases,
         audioNotePath: r.audio_note_path,
+        note: r.note ?? null,
         createdAt: r.created_at,
       }));
       setSessions(mapped);

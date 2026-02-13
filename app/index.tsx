@@ -26,7 +26,8 @@ import AddBabyModal from '../components/AddBabyModal';
 import AudioNoteRecorder from '../components/AudioNoteRecorder';
 import DiaperLogModal from '../components/DiaperLogModal';
 import { scheduleFeedingReminder } from '../utils/notifications';
-import { updateSessionAudioNote } from '../database';
+import { updateSessionAudioNote, updateSessionNote, getDayStats, getBottleDayStats, getDiaperDayStats } from '../database';
+import { getTodayDate, formatDurationHuman } from '../utils/time';
 
 const formatMM_SS = (s: number) => {
   const m = Math.floor(s / 60);
@@ -71,6 +72,7 @@ export default function HomeScreen() {
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
   const [showDiaper, setShowDiaper] = useState(false);
   const [showVolumeModal, setShowVolumeModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
   const [volumeValue, setVolumeValue] = useState(0);
   const [volumeUnit, setVolumeUnit] = useState<'ml' | 'oz'>('ml');
   const [selectedMode, setSelectedMode] = useState<FeedingMode>('breast');
@@ -93,19 +95,63 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, [isFeeding, lastFeedInfo?.endTime]);
 
-  // Reset to breast mode when switching babies
+  // Sync selectedMode with hook's feedingMode when restoring an active session
   const prevBabyIdRef = useRef(selectedBaby?.id);
   useEffect(() => {
     if (selectedBaby?.id !== prevBabyIdRef.current) {
       prevBabyIdRef.current = selectedBaby?.id;
-      setSelectedMode('breast');
+      if (!isFeeding) {
+        setSelectedMode('breast');
+      }
     }
-  }, [selectedBaby?.id]);
+    // When a session is restored, sync selectedMode to the restored feedingMode
+    if (isFeeding) {
+      setSelectedMode(feedingMode);
+    }
+  }, [selectedBaby?.id, isFeeding, feedingMode]);
 
   // Volume picker constants
   const ITEM_HEIGHT = 50;
   const ML_VALUES = Array.from({ length: 61 }, (_, i) => i * 5); // 0, 5, 10, ... 300
   const OZ_VALUES = Array.from({ length: 21 }, (_, i) => i * 0.5); // 0, 0.5, 1, ... 10
+
+  // ─── Today's Summary (idle dashboard) ──────────────────
+  interface TodaySummary {
+    totalFeedings: number;
+    totalDuration: number;
+    bottleCount: number;
+    totalVolume: number;
+    diaperTotal: number;
+    diaperPee: number;
+    diaperPoop: number;
+  }
+  const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
+
+  const loadTodaySummary = useCallback(async () => {
+    if (!selectedBaby) { setTodaySummary(null); return; }
+    try {
+      const today = getTodayDate();
+      const [feedRow, bottleRow, diaperRow] = await Promise.all([
+        getDayStats(selectedBaby.id, today),
+        getBottleDayStats(selectedBaby.id, today),
+        getDiaperDayStats(selectedBaby.id, today),
+      ]);
+      setTodaySummary({
+        totalFeedings: feedRow?.total_feedings ?? 0,
+        totalDuration: feedRow?.total_duration ?? 0,
+        bottleCount: bottleRow?.bottle_count ?? 0,
+        totalVolume: bottleRow?.total_volume ?? 0,
+        diaperTotal: diaperRow?.total ?? 0,
+        diaperPee: diaperRow?.total_pee ?? 0,
+        diaperPoop: diaperRow?.total_poop ?? 0,
+      });
+    } catch { setTodaySummary(null); }
+  }, [selectedBaby]);
+
+  // Load on mount, baby switch, and when feeding ends
+  useEffect(() => {
+    if (!isFeeding) loadTodaySummary();
+  }, [isFeeding, selectedBaby?.id]);
 
   const handleFeedingToggle = useCallback(async () => {
     if (!selectedBaby) {
@@ -125,7 +171,7 @@ export default function HomeScreen() {
         // Scroll to top after modal renders
         setTimeout(() => volumeScrollRef.current?.scrollTo({ y: 0, animated: false }), 100);
       } else {
-        setShowAudioRecorder(true);
+        setShowNoteModal(true);
       }
     }
   }, [selectedBaby, toggleFeeding, selectedMode]);
@@ -143,12 +189,12 @@ export default function HomeScreen() {
       await saveVolume(lastSessionId, mlValue);
     }
     setShowVolumeModal(false);
-    setShowAudioRecorder(true);
+    setShowNoteModal(true);
   };
 
   const handleVolumeSkip = () => {
     setShowVolumeModal(false);
-    setShowAudioRecorder(true);
+    setShowNoteModal(true);
   };
 
   const handleVolumeScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -189,6 +235,19 @@ export default function HomeScreen() {
   const handleSkipAudio = () => {
     setShowAudioRecorder(false);
     setShowReminder(true);
+  };
+
+  const handleQualitySelect = async (quality: string) => {
+    if (lastSessionId) {
+      await updateSessionNote(lastSessionId, quality);
+    }
+    setShowNoteModal(false);
+    setShowAudioRecorder(true);
+  };
+
+  const handleNoteSkip = () => {
+    setShowNoteModal(false);
+    setShowAudioRecorder(true);
   };
 
   const handleAddBaby = async (name: string, birthDate?: string, gender?: 'boy' | 'girl') => {
@@ -369,22 +428,50 @@ export default function HomeScreen() {
             </>
           ) : (
             <>
-              <View style={[styles.breakButton, { opacity: 0 }]} pointerEvents="none">
-                <Text style={styles.breakButtonText}>{'\u200B'}</Text>
-              </View>
-              <View style={[styles.breakTimerRow, { opacity: 0 }]} pointerEvents="none">
-                <Text style={styles.breakTimerValue}>{'\u200B'}</Text>
-              </View>
-              <View style={[styles.breastTimersRow, { opacity: 0 }]} pointerEvents="none">
-                <View style={styles.breastTimerCard}>
-                  <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
-                  <Text style={styles.breastTimerValue}>00:00</Text>
-                </View>
-                <View style={styles.breastTimerCard}>
-                  <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
-                  <Text style={styles.breastTimerValue}>00:00</Text>
-                </View>
-              </View>
+              {/* ─── Today's Summary (idle only) ─────────────── */}
+              {selectedBaby && todaySummary && todaySummary.totalFeedings > 0 ? (
+                <TouchableOpacity
+                  style={[styles.todayCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push('/statistics')}
+                >
+                  <Text style={[styles.todayTitle, { color: colors.text }]}>
+                    {'\uD83D\uDCCB'} Today
+                  </Text>
+                  <Text style={[styles.todayLine, { color: colors.textSecondary }]}>
+                    {'\uD83E\uDD31'} {todaySummary.totalFeedings} feeds {'\u00B7'} {formatDurationHuman(todaySummary.totalDuration)} total
+                  </Text>
+                  {todaySummary.bottleCount > 0 && (
+                    <Text style={[styles.todayLine, { color: colors.textSecondary }]}>
+                      {'\uD83C\uDF7C'} {todaySummary.bottleCount} bottles {'\u00B7'} {todaySummary.totalVolume} ml
+                    </Text>
+                  )}
+                  {todaySummary.diaperTotal > 0 && (
+                    <Text style={[styles.todayLine, { color: colors.textSecondary }]}>
+                      {'\uD83E\uDDF7'} {todaySummary.diaperTotal} diapers ({'\uD83D\uDCA7'}{todaySummary.diaperPee}  {'\uD83D\uDCA9'}{todaySummary.diaperPoop})
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <View style={[styles.breakButton, { opacity: 0 }]} pointerEvents="none">
+                    <Text style={styles.breakButtonText}>{'\u200B'}</Text>
+                  </View>
+                  <View style={[styles.breakTimerRow, { opacity: 0 }]} pointerEvents="none">
+                    <Text style={styles.breakTimerValue}>{'\u200B'}</Text>
+                  </View>
+                  <View style={[styles.breastTimersRow, { opacity: 0 }]} pointerEvents="none">
+                    <View style={styles.breastTimerCard}>
+                      <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
+                      <Text style={styles.breastTimerValue}>00:00</Text>
+                    </View>
+                    <View style={styles.breastTimerCard}>
+                      <Text style={styles.breastTimerLabel}>{'\u200B'}</Text>
+                      <Text style={styles.breastTimerValue}>00:00</Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </>
           )}
         </View>
@@ -490,10 +577,53 @@ export default function HomeScreen() {
         onCancel={handleSkipAudio}
       />
 
+      {/* Feeding Quality Modal */}
+      <Modal visible={showNoteModal} transparent animationType="fade">
+        <View style={styles.volumeModalOverlay}>
+          <View style={[styles.noteCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.noteTitle, { color: colors.text }]}>
+              How was this feed?
+            </Text>
+            <View style={styles.qualityRow}>
+              <TouchableOpacity
+                style={[styles.qualityButton, { backgroundColor: '#E8F5E9' }]}
+                activeOpacity={0.7}
+                onPress={() => handleQualitySelect('good')}
+              >
+                <Text style={styles.qualityEmoji}>😊</Text>
+                <Text style={[styles.qualityLabel, { color: '#2E7D32' }]}>Good</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.qualityButton, { backgroundColor: '#FFF8E1' }]}
+                activeOpacity={0.7}
+                onPress={() => handleQualitySelect('okay')}
+              >
+                <Text style={styles.qualityEmoji}>😐</Text>
+                <Text style={[styles.qualityLabel, { color: '#F9A825' }]}>Okay</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.qualityButton, { backgroundColor: '#FFEBEE' }]}
+                activeOpacity={0.7}
+                onPress={() => handleQualitySelect('poor')}
+              >
+                <Text style={styles.qualityEmoji}>😟</Text>
+                <Text style={[styles.qualityLabel, { color: '#C62828' }]}>Poor</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={handleNoteSkip} style={[styles.qualitySkip, { borderColor: colors.border }]}>
+              <Text style={[styles.qualitySkipText, { color: colors.textSecondary }]}>Skip →</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Diaper Log Modal */}
       <DiaperLogModal
         visible={showDiaper}
-        onClose={() => setShowDiaper(false)}
+        onClose={() => {
+          setShowDiaper(false);
+          loadTodaySummary();
+        }}
       />
 
       {/* Bottom Navigation */}
@@ -620,6 +750,7 @@ const styles = StyleSheet.create({
   },
   phaseControls: {
     alignItems: 'center',
+    alignSelf: 'stretch',
     marginTop: 16,
   },
   breakButton: {
@@ -825,5 +956,82 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: 0.5,
+  },
+  todayCard: {
+    alignSelf: 'stretch',
+    marginHorizontal: 16,
+    marginTop: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  todayTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 10,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  todayLine: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 5,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  noteCard: {
+    width: '85%',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  noteTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 20,
+  },
+  qualityRow: {
+    flexDirection: 'row',
+    gap: 14,
+    marginBottom: 16,
+  },
+  qualityButton: {
+    flex: 1,
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 6,
+  },
+  qualityEmoji: {
+    fontSize: 36,
+  },
+  qualityLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  qualitySkip: {
+    width: '100%',
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(150,150,150,0.3)',
+    alignItems: 'center',
+  },
+  qualitySkipText: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

@@ -77,6 +77,9 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
   try {
     await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN volume INTEGER');
   } catch { /* already exists */ }
+  try {
+    await database.runAsync('ALTER TABLE feeding_sessions ADD COLUMN note TEXT');
+  } catch { /* already exists */ }
 }
 
 // ─── Baby CRUD ───────────────────────────────────────────────
@@ -171,6 +174,17 @@ export async function updateSessionVolume(
   await database.runAsync(
     'UPDATE feeding_sessions SET volume = ? WHERE id = ?',
     [volume, id]
+  );
+}
+
+export async function updateSessionNote(
+  id: string,
+  note: string
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE feeding_sessions SET note = ? WHERE id = ?',
+    [note, id]
   );
 }
 

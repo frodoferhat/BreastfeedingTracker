@@ -139,17 +139,48 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
         </View>
       </View>
 
-      {session.audioNotePath && (
-        <View style={styles.audioIndicator}>
-          <TouchableOpacity
-            onPress={handlePlayAudio}
-            style={[styles.playButton, { backgroundColor: colors.primaryLight }]}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.playButtonText, { color: colors.primary }]}>
-              {isPlaying ? '⏹ Stop Audio' : '▶️ Play Audio Note'}
-            </Text>
-          </TouchableOpacity>
+      {(session.audioNotePath || session.note) && (
+        <View style={styles.metaRow}>
+          {session.audioNotePath && (
+            <TouchableOpacity
+              onPress={handlePlayAudio}
+              style={[styles.playButton, { backgroundColor: colors.primaryLight, flex: session.note ? undefined : 1 }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.playButtonText, { color: colors.primary }]}>
+                {isPlaying ? '⏹ Stop Audio' : '▶️ Play Audio Note'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {session.note ? (
+            <View style={[
+              styles.qualityBadge,
+              {
+                flex: 1,
+                backgroundColor:
+                  session.note === 'good' ? '#E8F5E9' :
+                  session.note === 'okay' ? '#FFF8E1' :
+                  session.note === 'poor' ? '#FFEBEE' :
+                  colors.primaryLight,
+              },
+            ]}>
+              <Text style={[
+                styles.qualityBadgeText,
+                {
+                  color:
+                    session.note === 'good' ? '#2E7D32' :
+                    session.note === 'okay' ? '#F9A825' :
+                    session.note === 'poor' ? '#C62828' :
+                    colors.text,
+                },
+              ]}>
+                {session.note === 'good' ? '😊 Good' :
+                 session.note === 'okay' ? '😐 Okay' :
+                 session.note === 'poor' ? '😟 Poor' :
+                 `📝 ${session.note}`}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -270,6 +301,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: '#E5E7EB',
   },
+  metaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E7EB',
+  },
   audioText: {
     fontSize: 12,
   },
@@ -277,9 +316,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: 10,
-    alignSelf: 'flex-start',
   },
   playButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  qualityBadge: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qualityBadgeText: {
     fontSize: 15,
     fontWeight: '600',
   },

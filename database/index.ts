@@ -9,6 +9,7 @@ export {
   updateSessionAudioNote,
   updateSessionPhaseState,
   updateSessionVolume,
+  updateSessionNote,
   deleteSession,
   getSessionsByBabyAndDate,
   getSessionsByBabyAndDateRange,

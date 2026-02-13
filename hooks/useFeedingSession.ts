@@ -242,7 +242,7 @@ export function useFeedingSession(babyId: string | null) {
             const snap: PhaseStateSnapshot = JSON.parse(session.phase_state);
             setCurrentPhase(snap.currentPhase);
             setOnBreak(snap.onBreak);
-            if (snap.feedingMode) setFeedingMode(snap.feedingMode);
+            // feedingMode already set from session.feeding_mode (source of truth)
             phasesRef.current = snap.phases;
             phaseStartRef.current = snap.phaseStart;
             firstAccRef.current = snap.firstAcc;
@@ -293,7 +293,7 @@ export function useFeedingSession(babyId: string | null) {
   };
 
   // Quick persist of current refs to DB (call after mutations)
-  const persistPhaseState = async (sessionId: string, phase: FeedingPhase, isOnBreak: boolean) => {
+  const persistPhaseState = async (sessionId: string, phase: FeedingPhase, isOnBreak: boolean, modeOverride?: FeedingMode) => {
     const snapshot: PhaseStateSnapshot = {
       currentPhase: phase,
       onBreak: isOnBreak,
@@ -302,7 +302,7 @@ export function useFeedingSession(babyId: string | null) {
       firstAcc: firstAccRef.current,
       secondAcc: secondAccRef.current,
       breakAcc: breakAccRef.current,
-      feedingMode,
+      feedingMode: modeOverride ?? feedingMode,
     };
     try {
       await updateSessionPhaseState(sessionId, JSON.stringify(snapshot));
@@ -341,7 +341,7 @@ export function useFeedingSession(babyId: string | null) {
       phaseStartRef.current = startTime;
       setStatusMessage(mode === 'bottle' ? 'BOTTLE FEEDING STARTED' : 'FEEDING STARTED');
       setElapsed(0);
-      await persistPhaseState(id, 'first', false);
+      await persistPhaseState(id, 'first', false, mode);
     } catch (err) {
       console.error('Failed to start session:', err);
     }
