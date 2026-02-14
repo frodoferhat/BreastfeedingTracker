@@ -632,7 +632,7 @@ export default function HomeScreen() {
           onPress={() => router.push('/statistics')}
           style={[styles.navButton, { backgroundColor: colors.surface }]}
         >
-          <Text style={[styles.navText, { color: colors.text }]}>📊 Statistics</Text>
+          <Text style={[styles.navText, { color: colors.text }]}>📊 Stats & Growth</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => router.push('/export')}

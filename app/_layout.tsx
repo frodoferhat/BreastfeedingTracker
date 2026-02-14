@@ -48,7 +48,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="statistics"
           options={{
-            title: 'Statistics',
+            title: 'Stats & Growth',
           }}
         />
         <Stack.Screen

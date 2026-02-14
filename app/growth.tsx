@@ -11,6 +11,8 @@ import {
   Dimensions,
   Keyboard,
   TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
@@ -58,6 +60,20 @@ export default function GrowthScreen() {
   const [formWeightUnit, setFormWeightUnit] = useState<'kg' | 'g'>('kg');
   const [formHeight, setFormHeight] = useState('');
   const [formHead, setFormHead] = useState('');
+
+  // Allow digits, dots, and commas for decimal input
+  const handleDecimalInput = (setter: (v: string) => void) => (text: string) => {
+    // Only allow digits, one dot or comma
+    const cleaned = text.replace(/[^0-9.,]/g, '');
+    setter(cleaned);
+  };
+
+  const parseDecimal = (text: string): number | null => {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    const val = parseFloat(trimmed.replace(',', '.'));
+    return isNaN(val) ? null : val;
+  };
   const [formDate, setFormDate] = useState(format(new Date(), 'dd-MM-yyyy'));
 
   const handleDateChange = (text: string) => {
@@ -111,9 +127,9 @@ export default function GrowthScreen() {
 
   const handleAdd = async () => {
     if (!selectedBaby) return;
-    let w = formWeight.trim() ? parseFloat(formWeight) : null;
-    const h = formHeight.trim() ? parseFloat(formHeight) : null;
-    const hd = formHead.trim() ? parseFloat(formHead) : null;
+    let w = parseDecimal(formWeight);
+    const h = parseDecimal(formHeight);
+    const hd = parseDecimal(formHead);
 
     if (w === null && h === null && hd === null) {
       Alert.alert('Missing Data', 'Please enter at least one measurement.');
@@ -263,25 +279,30 @@ export default function GrowthScreen() {
         {/* Latest Measurements Summary */}
         {records.length > 0 && (
           <View style={[styles.latestCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.latestTitle, { color: colors.text }]}>Latest Measurements</Text>
+            <Text style={[styles.latestTitle, { color: colors.text }]}>📊 Latest Measurements</Text>
             <Text style={[styles.latestDate, { color: colors.textSecondary }]}>
               {format(parseISO(records[0].date), 'MMM d, yyyy')}
               {selectedBaby.birthDate ? ` · ${getAgeLabel(records[0].date)}` : ''}
             </Text>
-            <View style={styles.latestRow}>
+            <View style={styles.latestMetrics}>
               {records[0].weightKg != null && (() => {
                 const pct = getPercentileForRecord(records[0], 'weight');
                 const pctLabel = pct != null ? getPercentileLabel(pct) : null;
                 return (
-                  <View style={[styles.latestItem, { backgroundColor: '#E8F5E9' }]}>
-                    <Text style={styles.latestEmoji}>⚖️</Text>
-                    <Text style={[styles.latestValue, { color: '#2E7D32' }]}>{records[0].weightKg}</Text>
-                    <Text style={[styles.latestUnit, { color: '#4CAF50' }]}>kg</Text>
+                  <View style={[styles.metricCard, { backgroundColor: '#E8F5E9' }]}>
+                    <View style={styles.metricHeader}>
+                      <Text style={styles.metricEmoji}>⚖️</Text>
+                      <Text style={[styles.metricLabel, { color: '#4CAF50' }]}>Weight</Text>
+                    </View>
+                    <View style={styles.metricValueRow}>
+                      <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{records[0].weightKg}</Text>
+                      <Text style={[styles.metricUnit, { color: '#66BB6A' }]}>kg</Text>
+                    </View>
                     {pct != null && pctLabel && (
-                      <View style={[styles.percentileBadge, { backgroundColor: pctLabel.color + '18' }]}>
-                        <Text style={[styles.percentileText, { color: pctLabel.color }]}>
-                          P{pct}
-                        </Text>
+                      <View style={[styles.metricPercentile, { backgroundColor: pctLabel.color + '15' }]}>
+                        <View style={[styles.pctDot, { backgroundColor: pctLabel.color }]} />
+                        <Text style={[styles.pctValue, { color: pctLabel.color }]}>P{pct}</Text>
+                        <Text style={[styles.pctLabel, { color: pctLabel.color }]}>{pctLabel.text}</Text>
                       </View>
                     )}
                   </View>
@@ -291,15 +312,20 @@ export default function GrowthScreen() {
                 const pct = getPercentileForRecord(records[0], 'height');
                 const pctLabel = pct != null ? getPercentileLabel(pct) : null;
                 return (
-                  <View style={[styles.latestItem, { backgroundColor: '#E3F2FD' }]}>
-                    <Text style={styles.latestEmoji}>📐</Text>
-                    <Text style={[styles.latestValue, { color: '#1565C0' }]}>{records[0].heightCm}</Text>
-                    <Text style={[styles.latestUnit, { color: '#2196F3' }]}>cm</Text>
+                  <View style={[styles.metricCard, { backgroundColor: '#E3F2FD' }]}>
+                    <View style={styles.metricHeader}>
+                      <Text style={styles.metricEmoji}>📐</Text>
+                      <Text style={[styles.metricLabel, { color: '#2196F3' }]}>Height</Text>
+                    </View>
+                    <View style={styles.metricValueRow}>
+                      <Text style={[styles.metricValue, { color: '#1565C0' }]}>{records[0].heightCm}</Text>
+                      <Text style={[styles.metricUnit, { color: '#42A5F5' }]}>cm</Text>
+                    </View>
                     {pct != null && pctLabel && (
-                      <View style={[styles.percentileBadge, { backgroundColor: pctLabel.color + '18' }]}>
-                        <Text style={[styles.percentileText, { color: pctLabel.color }]}>
-                          P{pct}
-                        </Text>
+                      <View style={[styles.metricPercentile, { backgroundColor: pctLabel.color + '15' }]}>
+                        <View style={[styles.pctDot, { backgroundColor: pctLabel.color }]} />
+                        <Text style={[styles.pctValue, { color: pctLabel.color }]}>P{pct}</Text>
+                        <Text style={[styles.pctLabel, { color: pctLabel.color }]}>{pctLabel.text}</Text>
                       </View>
                     )}
                   </View>
@@ -309,15 +335,20 @@ export default function GrowthScreen() {
                 const pct = getPercentileForRecord(records[0], 'head');
                 const pctLabel = pct != null ? getPercentileLabel(pct) : null;
                 return (
-                  <View style={[styles.latestItem, { backgroundColor: '#FFF3E0' }]}>
-                    <Text style={styles.latestEmoji}>🧒</Text>
-                    <Text style={[styles.latestValue, { color: '#E65100' }]}>{records[0].headCm}</Text>
-                    <Text style={[styles.latestUnit, { color: '#FF9800' }]}>cm</Text>
+                  <View style={[styles.metricCard, { backgroundColor: '#FFF3E0' }]}>
+                    <View style={styles.metricHeader}>
+                      <Text style={styles.metricEmoji}>🧒</Text>
+                      <Text style={[styles.metricLabel, { color: '#FF9800' }]}>Head</Text>
+                    </View>
+                    <View style={styles.metricValueRow}>
+                      <Text style={[styles.metricValue, { color: '#E65100' }]}>{records[0].headCm}</Text>
+                      <Text style={[styles.metricUnit, { color: '#FFA726' }]}>cm</Text>
+                    </View>
                     {pct != null && pctLabel && (
-                      <View style={[styles.percentileBadge, { backgroundColor: pctLabel.color + '18' }]}>
-                        <Text style={[styles.percentileText, { color: pctLabel.color }]}>
-                          P{pct}
-                        </Text>
+                      <View style={[styles.metricPercentile, { backgroundColor: pctLabel.color + '15' }]}>
+                        <View style={[styles.pctDot, { backgroundColor: pctLabel.color }]} />
+                        <Text style={[styles.pctValue, { color: pctLabel.color }]}>P{pct}</Text>
+                        <Text style={[styles.pctLabel, { color: pctLabel.color }]}>{pctLabel.text}</Text>
                       </View>
                     )}
                   </View>
@@ -491,106 +522,117 @@ export default function GrowthScreen() {
 
       {/* Add Measurement Modal */}
       <Modal visible={showAddModal} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>New Measurement</Text>
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>New Measurement</Text>
 
-            {/* Date */}
-            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>DATE</Text>
-            <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={formDate}
-              onChangeText={handleDateChange}
-              placeholder="DD-MM-YYYY"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              maxLength={10}
-            />
+                  {/* Date */}
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>DATE</Text>
+                  <TextInput
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                    value={formDate}
+                    onChangeText={handleDateChange}
+                    placeholder="DD-MM-YYYY"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                    maxLength={10}
+                  />
 
-            {/* Weight */}
-            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>⚖️ WEIGHT</Text>
-            <View style={styles.weightInputRow}>
-              <TextInput
-                style={[styles.input, styles.weightInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-                value={formWeight}
-                onChangeText={setFormWeight}
-                placeholder={formWeightUnit === 'kg' ? 'e.g. 4.5' : 'e.g. 4500'}
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="decimal-pad"
-              />
-              <View style={[styles.unitToggle, { borderColor: colors.border }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.unitOption,
-                    formWeightUnit === 'kg' && { backgroundColor: colors.primary },
-                  ]}
-                  onPress={() => setFormWeightUnit('kg')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.unitOptionText,
-                    { color: formWeightUnit === 'kg' ? '#FFF' : colors.textSecondary },
-                  ]}>kg</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.unitOption,
-                    formWeightUnit === 'g' && { backgroundColor: colors.primary },
-                  ]}
-                  onPress={() => setFormWeightUnit('g')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.unitOptionText,
-                    { color: formWeightUnit === 'g' ? '#FFF' : colors.textSecondary },
-                  ]}>g</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+                  {/* Weight */}
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>⚖️ WEIGHT</Text>
+                  <View style={styles.weightInputRow}>
+                    <TextInput
+                      style={[styles.input, styles.weightInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                      value={formWeight}
+                      onChangeText={handleDecimalInput(setFormWeight)}
+                      placeholder={formWeightUnit === 'kg' ? 'e.g. 4,5' : 'e.g. 4500'}
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                    <View style={[styles.unitToggle, { borderColor: colors.border }]}>
+                      <TouchableOpacity
+                        style={[
+                          styles.unitOption,
+                          formWeightUnit === 'kg' && { backgroundColor: colors.primary },
+                        ]}
+                        onPress={() => setFormWeightUnit('kg')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[
+                          styles.unitOptionText,
+                          { color: formWeightUnit === 'kg' ? '#FFF' : colors.textSecondary },
+                        ]}>kg</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.unitOption,
+                          formWeightUnit === 'g' && { backgroundColor: colors.primary },
+                        ]}
+                        onPress={() => setFormWeightUnit('g')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[
+                          styles.unitOptionText,
+                          { color: formWeightUnit === 'g' ? '#FFF' : colors.textSecondary },
+                        ]}>g</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
-            {/* Height */}
-            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>📐 HEIGHT (cm)</Text>
-            <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={formHeight}
-              onChangeText={setFormHeight}
-              placeholder="e.g. 52"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="decimal-pad"
-            />
+                  {/* Height */}
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>📐 HEIGHT (cm)</Text>
+                  <TextInput
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                    value={formHeight}
+                    onChangeText={handleDecimalInput(setFormHeight)}
+                    placeholder="e.g. 52,5"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numbers-and-punctuation"
+                  />
 
-            {/* Head */}
-            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>🧒 HEAD (cm)</Text>
-            <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={formHead}
-              onChangeText={setFormHead}
-              placeholder="e.g. 35"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="decimal-pad"
-            />
+                  {/* Head */}
+                  <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>🧒 HEAD (cm)</Text>
+                  <TextInput
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                    value={formHead}
+                    onChangeText={handleDecimalInput(setFormHead)}
+                    placeholder="e.g. 38,3"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numbers-and-punctuation"
+                  />
 
-            {/* Buttons */}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalCancel, { borderColor: colors.border }]}
-                onPress={() => setShowAddModal(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSave, { backgroundColor: colors.primary }]}
-                onPress={handleAdd}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+                  {/* Buttons */}
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity
+                      style={[styles.modalCancel, { borderColor: colors.border }]}
+                      onPress={() => setShowAddModal(false)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalSave, { backgroundColor: colors.primary }]}
+                      onPress={handleAdd}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.modalSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </ScrollView>
           </View>
-          </View>
-        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -766,59 +808,89 @@ const styles = StyleSheet.create({
   },
   // Latest measurement card
   latestCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 18,
+    padding: 20,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   latestTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '800',
     marginBottom: 4,
   },
   latestDate: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  latestRow: {
+  latestMetrics: {
+    gap: 12,
+  },
+  metricCard: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  latestItem: {
-    flex: 1,
     alignItems: 'center',
-    borderRadius: 14,
-    paddingVertical: 14,
-    gap: 4,
+    borderRadius: 16,
+    padding: 16,
   },
-  latestEmoji: {
-    fontSize: 22,
+  metricHeader: {
+    alignItems: 'center',
+    width: 50,
   },
-  latestValue: {
-    fontSize: 24,
-    fontWeight: '800',
+  metricEmoji: {
+    fontSize: 26,
   },
-  latestUnit: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  percentileBadge: {
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  percentileText: {
+  metricLabel: {
     fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  metricValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginLeft: 12,
+    flex: 1,
+  },
+  metricValue: {
+    fontSize: 28,
     fontWeight: '800',
+  },
+  metricUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  metricPercentile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 5,
+  },
+  pctDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  pctValue: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  pctLabel: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   percentileNote: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 14,
     fontStyle: 'italic',
   },
   // Chart
@@ -977,6 +1049,9 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
