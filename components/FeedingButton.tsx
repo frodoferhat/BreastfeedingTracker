@@ -173,6 +173,10 @@ export default function FeedingButton({
             borderRadius: BUTTON_SIZE / 2,
             backgroundColor: buttonColor,
             shadowColor: buttonColor,
+            borderTopColor: 'rgba(255,255,255,0.25)',
+            borderLeftColor: 'rgba(255,255,255,0.15)',
+            borderBottomColor: 'rgba(0,0,0,0.2)',
+            borderRightColor: 'rgba(0,0,0,0.1)',
           },
         ]}
       >
@@ -193,10 +197,14 @@ const styles = StyleSheet.create({
   button: {
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 12,
+    borderTopWidth: 2.5,
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 3,
+    borderRightWidth: 1.5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 14,
   },
   emoji: {
     fontSize: 64,

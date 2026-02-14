@@ -63,7 +63,7 @@ export default function AudioNoteRecorder({
           <Text
             style={[
               styles.timer,
-              { color: colors.danger, opacity: isRecording ? 1 : 0 },
+              { color: '#8B5E5E', opacity: isRecording ? 1 : 0 },
             ]}
           >
             {isRecording ? formatDuration(recordingDuration) : '00:00:00'}
@@ -79,8 +79,8 @@ export default function AudioNoteRecorder({
                 width: RECORD_BUTTON_SIZE,
                 height: RECORD_BUTTON_SIZE,
                 borderRadius: RECORD_BUTTON_SIZE / 2,
-                backgroundColor: isRecording ? colors.success : colors.danger,
-                shadowColor: isRecording ? colors.success : colors.danger,
+                backgroundColor: isRecording ? '#5B8A72' : '#8B6B6B',
+                shadowColor: isRecording ? '#5B8A72' : '#8B6B6B',
               },
             ]}
           >
@@ -94,8 +94,8 @@ export default function AudioNoteRecorder({
 
           {/* Recording pulse indicator — always rendered to reserve space */}
           <View style={[styles.recordingIndicator, { opacity: isRecording ? 1 : 0 }]}>
-            <View style={[styles.recordingDot, { backgroundColor: colors.danger }]} />
-            <Text style={[styles.recordingText, { color: colors.danger }]}>
+            <View style={[styles.recordingDot, { backgroundColor: '#8B5E5E' }]} />
+            <Text style={[styles.recordingText, { color: '#8B5E5E' }]}>
               Recording in progress
             </Text>
           </View>

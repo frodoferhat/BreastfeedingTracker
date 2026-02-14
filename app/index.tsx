@@ -433,7 +433,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={[styles.todayCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   activeOpacity={0.7}
-                  onPress={() => router.push('/statistics')}
+                  onPress={() => router.push('/calendar')}
                 >
                   <Text style={[styles.todayTitle, { color: colors.text }]}>
                     {'\uD83D\uDCCB'} Today

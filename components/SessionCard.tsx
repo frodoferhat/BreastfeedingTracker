@@ -144,11 +144,11 @@ export default function SessionCard({ session, sessionNumber, onDelete }: Sessio
           {session.audioNotePath && (
             <TouchableOpacity
               onPress={handlePlayAudio}
-              style={[styles.playButton, { backgroundColor: colors.primaryLight, flex: session.note ? undefined : 1 }]}
+              style={[styles.playButton, { backgroundColor: '#F3E5F5', flex: session.note ? undefined : 1 }]}
               activeOpacity={0.7}
             >
-              <Text style={[styles.playButtonText, { color: colors.primary }]}>
-                {isPlaying ? '⏹ Stop Audio' : '▶️ Play Audio Note'}
+              <Text style={[styles.playButtonText, { color: '#7B1FA2' }]}>
+                {isPlaying ? '⏹ Stop Audio' : '🎙️ Play Note'}
               </Text>
             </TouchableOpacity>
           )}
