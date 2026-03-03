@@ -18,9 +18,10 @@ import {
   getDiaperDayStats, getDiaperWeekStats,
   getBottleDayStats, getBottleWeekStats,
   getFirstSessionDate, getDailyStatsForRange,
+  getSleepDayStats, getSleepWeekStats,
 } from '../database';
 import { getTodayDate, formatDateDisplay, formatDurationHuman } from '../utils/time';
-import { DayStatistics, DiaperDayStats, DiaperWeekStats, BottleDayStats, BottleWeekStats } from '../types';
+import { DayStatistics, DiaperDayStats, DiaperWeekStats, BottleDayStats, BottleWeekStats, SleepDayStats, SleepWeekStats } from '../types';
 import { format, subDays, startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, subMonths, isBefore, parseISO } from 'date-fns';
 
 // Enable LayoutAnimation on Android
@@ -69,6 +70,11 @@ export default function StatisticsScreen() {
   const [todayBottle, setTodayBottle] = useState<BottleDayStats | null>(null);
   const [yesterdayBottle, setYesterdayBottle] = useState<BottleDayStats | null>(null);
   const [weekBottle, setWeekBottle] = useState<BottleWeekStats | null>(null);
+
+  // Sleep stats
+  const [todaySleep, setTodaySleep] = useState<SleepDayStats | null>(null);
+  const [yesterdaySleep, setYesterdaySleep] = useState<SleepDayStats | null>(null);
+  const [weekSleep, setWeekSleep] = useState<SleepWeekStats | null>(null);
 
   // History state
   const [previousWeeks, setPreviousWeeks] = useState<WeekHistoryItem[]>([]);
@@ -207,6 +213,42 @@ export default function StatisticsScreen() {
           totalVolume: weekBottleRow.total_volume ?? 0,
           avgVolume: Math.round(weekBottleRow.avg_volume ?? 0),
           avgDailyVolume: Math.round((weekBottleRow.total_volume ?? 0) / days),
+        });
+      }
+
+      // ── Sleep stats ──
+      const todaySleepRow = await getSleepDayStats(selectedBaby.id, today);
+      if (todaySleepRow) {
+        setTodaySleep({
+          totalSleeps: todaySleepRow.total_sleeps ?? 0,
+          totalDuration: todaySleepRow.total_duration ?? 0,
+          longestSleep: todaySleepRow.longest_sleep ?? 0,
+          napCount: todaySleepRow.nap_count ?? 0,
+          nightCount: todaySleepRow.night_count ?? 0,
+        });
+      }
+
+      const yesterdaySleepRow = await getSleepDayStats(selectedBaby.id, yesterday);
+      if (yesterdaySleepRow) {
+        setYesterdaySleep({
+          totalSleeps: yesterdaySleepRow.total_sleeps ?? 0,
+          totalDuration: yesterdaySleepRow.total_duration ?? 0,
+          longestSleep: yesterdaySleepRow.longest_sleep ?? 0,
+          napCount: yesterdaySleepRow.nap_count ?? 0,
+          nightCount: yesterdaySleepRow.night_count ?? 0,
+        });
+      }
+
+      const weekSleepRow = await getSleepWeekStats(selectedBaby.id, weekStart, weekEnd);
+      if (weekSleepRow) {
+        setWeekSleep({
+          totalSleeps: weekSleepRow.total_sleeps ?? 0,
+          totalDuration: weekSleepRow.total_duration ?? 0,
+          longestSleep: weekSleepRow.longest_sleep ?? 0,
+          napCount: weekSleepRow.nap_count ?? 0,
+          nightCount: weekSleepRow.night_count ?? 0,
+          avgPerDay: Math.round((weekSleepRow.total_sleeps ?? 0) / 7 * 10) / 10,
+          avgDuration: Math.round(weekSleepRow.avg_duration ?? 0),
         });
       }
     } catch (err) {
@@ -430,6 +472,29 @@ export default function StatisticsScreen() {
           colors={colors}
         />
 
+        {/* ─── Sleep Statistics ───────────────────────── */}
+        <View style={styles.sectionDivider}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>😴 Sleep Tracking</Text>
+        </View>
+
+        <SleepStatsCard
+          title={`📅 Today — ${formatDateDisplay(getTodayDate())}`}
+          stats={todaySleep}
+          colors={colors}
+          onPress={() => router.push('/sleep')}
+        />
+
+        <SleepStatsCard
+          title={`📅 Yesterday — ${formatDateDisplay(yesterday)}`}
+          stats={yesterdaySleep}
+          colors={colors}
+        />
+
+        <SleepWeekStatsCard
+          stats={weekSleep}
+          colors={colors}
+        />
+
         {/* ─── Previous Weeks ─────────────────────────── */}
         {previousWeeks.length > 0 && (
           <>
@@ -554,6 +619,8 @@ export default function StatisticsScreen() {
 
 // ─── Diaper Stats Card (Day) ─────────────────────────────
 
+const DIAPER_COLOR = '#F59E0B';
+
 function DiaperStatsCard({ title, stats, colors, onTotalPress }: { title: string; stats: DiaperDayStats | null; colors: any; onTotalPress?: () => void }) {
   if (!stats || stats.total === 0) {
     return (
@@ -566,33 +633,44 @@ function DiaperStatsCard({ title, stats, colors, onTotalPress }: { title: string
     );
   }
 
+  const rows = [
+    { label: 'Total', value: stats.total.toString(), icon: '🧷', tappable: !!onTotalPress },
+    { label: 'Pee', value: stats.totalPee.toString(), icon: '💧' },
+    { label: 'Poop', value: stats.totalPoop.toString(), icon: '💩' },
+  ];
+
   return (
     <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.diaperCardTitle, { color: colors.text }]}>{title}</Text>
-      <View style={styles.diaperStatsRow}>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>💧</Text>
-          <Text style={[styles.diaperStatValue, { color: '#3B82F6' }]}>{stats.totalPee}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Pee</Text>
-        </View>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>💩</Text>
-          <Text style={[styles.diaperStatValue, { color: '#92400E' }]}>{stats.totalPoop}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Poop</Text>
-        </View>
-        <TouchableOpacity
-          onPress={onTotalPress}
-          style={[styles.diaperStatItem, { backgroundColor: colors.background, borderWidth: onTotalPress ? 1.5 : 0, borderColor: colors.primary }]}
-          activeOpacity={0.7}
-          disabled={!onTotalPress}
-        >
-          <Text style={styles.diaperStatEmoji}>🧷</Text>
-          <Text style={[styles.diaperStatValue, { color: onTotalPress ? colors.primary : colors.text }]}>{stats.total}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
-          {onTotalPress && (
-            <Text style={[styles.diaperTapHint, { color: colors.primary }]}>View ›</Text>
-          )}
-        </TouchableOpacity>
+      <View style={styles.diaperGrid}>
+        {rows.map((row) => {
+          const Wrapper = row.tappable && onTotalPress ? TouchableOpacity : View;
+          return (
+            <Wrapper
+              key={row.label}
+              onPress={row.tappable ? onTotalPress : undefined}
+              style={[
+                styles.diaperStatRow,
+                { backgroundColor: colors.background },
+                row.tappable ? { borderWidth: 1.5, borderColor: DIAPER_COLOR } : undefined,
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.diaperStatIcon}>{row.icon}</Text>
+              <View style={styles.diaperStatContent}>
+                <Text style={[styles.diaperStatValue, { color: row.tappable ? DIAPER_COLOR : colors.text }]}>
+                  {row.value}
+                </Text>
+                <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>
+                  {row.label}
+                </Text>
+              </View>
+              {row.tappable && onTotalPress && (
+                <Text style={[styles.diaperTapHint, { color: DIAPER_COLOR }]}>View ›</Text>
+              )}
+            </Wrapper>
+          );
+        })}
       </View>
     </View>
   );
@@ -612,30 +690,143 @@ function DiaperWeekStatsCard({ stats, colors }: { stats: DiaperWeekStats | null;
     );
   }
 
+  const rows = [
+    { label: 'Total', value: stats.total.toString(), icon: '🧷' },
+    { label: 'Pee', value: stats.totalPee.toString(), icon: '💧' },
+    { label: 'Poop', value: stats.totalPoop.toString(), icon: '💩' },
+    { label: 'Avg / Day', value: stats.avgPerDay.toString(), icon: '📈' },
+  ];
+
   return (
     <View style={[styles.diaperCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.diaperCardTitle, { color: colors.text }]}>📊 This Week</Text>
-      <View style={styles.diaperStatsRow}>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>💧</Text>
-          <Text style={[styles.diaperStatValue, { color: '#3B82F6' }]}>{stats.totalPee}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Pee</Text>
-        </View>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>💩</Text>
-          <Text style={[styles.diaperStatValue, { color: '#92400E' }]}>{stats.totalPoop}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Poop</Text>
-        </View>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>🧷</Text>
-          <Text style={[styles.diaperStatValue, { color: colors.text }]}>{stats.total}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Total</Text>
-        </View>
-        <View style={[styles.diaperStatItem, { backgroundColor: colors.background }]}>
-          <Text style={styles.diaperStatEmoji}>📈</Text>
-          <Text style={[styles.diaperStatValue, { color: colors.text }]}>{stats.avgPerDay}</Text>
-          <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>Avg/Day</Text>
-        </View>
+      <View style={styles.diaperGrid}>
+        {rows.map((row) => (
+          <View
+            key={row.label}
+            style={[styles.diaperStatRow, { backgroundColor: colors.background }]}
+          >
+            <Text style={styles.diaperStatIcon}>{row.icon}</Text>
+            <View style={styles.diaperStatContent}>
+              <Text style={[styles.diaperStatValue, { color: colors.text }]}>
+                {row.value}
+              </Text>
+              <Text style={[styles.diaperStatLabel, { color: colors.textSecondary }]}>
+                {row.label}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ─── Sleep Stats Card (Day) ──────────────────────────────
+
+const SLEEP_COLOR = '#6C5CE7';
+
+function SleepStatsCard({ title, stats, colors, onPress }: { title: string; stats: SleepDayStats | null; colors: any; onPress?: () => void }) {
+  if (!stats || stats.totalSleeps === 0) {
+    return (
+      <View style={[styles.sleepCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.sleepCardTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.sleepCardEmpty, { color: colors.textSecondary }]}>
+          No sleep recorded
+        </Text>
+      </View>
+    );
+  }
+
+  const rows = [
+    { label: 'Total Sleeps', value: stats.totalSleeps.toString(), icon: '😴', tappable: !!onPress },
+    { label: 'Total Time', value: formatDurationHuman(stats.totalDuration), icon: '⏱️' },
+    { label: 'Longest', value: formatDurationHuman(stats.longestSleep), icon: '📈' },
+  ];
+  if (stats.napCount > 0) rows.push({ label: 'Naps', value: `${stats.napCount}`, icon: '☀️' });
+  if (stats.nightCount > 0) rows.push({ label: 'Nights', value: `${stats.nightCount}`, icon: '🌙' });
+
+  return (
+    <View style={[styles.sleepCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.sleepCardTitle, { color: colors.text }]}>{title}</Text>
+      <View style={styles.sleepGrid}>
+        {rows.map((row) => {
+          const Wrapper = row.tappable && onPress ? TouchableOpacity : View;
+          return (
+            <Wrapper
+              key={row.label}
+              onPress={row.tappable ? onPress : undefined}
+              style={[
+                styles.sleepStatRow,
+                { backgroundColor: colors.background },
+                row.tappable ? { borderWidth: 1.5, borderColor: SLEEP_COLOR } : undefined,
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sleepStatIcon}>{row.icon}</Text>
+              <View style={styles.sleepStatContent}>
+                <Text style={[styles.sleepStatValue, { color: row.tappable ? SLEEP_COLOR : colors.text }]}>
+                  {row.value}
+                </Text>
+                <Text style={[styles.sleepStatLabel, { color: colors.textSecondary }]}>
+                  {row.label}
+                </Text>
+              </View>
+              {row.tappable && onPress && (
+                <Text style={[styles.sleepTapHint, { color: SLEEP_COLOR }]}>View ›</Text>
+              )}
+            </Wrapper>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── Sleep Stats Card (Week) ─────────────────────────────
+
+function SleepWeekStatsCard({ stats, colors }: { stats: SleepWeekStats | null; colors: any }) {
+  if (!stats || stats.totalSleeps === 0) {
+    return (
+      <View style={[styles.sleepCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.sleepCardTitle, { color: colors.text }]}>📊 This Week</Text>
+        <Text style={[styles.sleepCardEmpty, { color: colors.textSecondary }]}>
+          No sleep recorded
+        </Text>
+      </View>
+    );
+  }
+
+  const rows = [
+    { label: 'Total Sleeps', value: stats.totalSleeps.toString(), icon: '😴' },
+    { label: 'Total Time', value: formatDurationHuman(stats.totalDuration), icon: '⏱️' },
+    { label: 'Average', value: formatDurationHuman(stats.avgDuration), icon: '📊' },
+    { label: 'Longest', value: formatDurationHuman(stats.longestSleep), icon: '📈' },
+    { label: 'Per Day', value: stats.avgPerDay.toString(), icon: '📅' },
+  ];
+  if (stats.napCount > 0) rows.push({ label: 'Naps', value: `${stats.napCount}`, icon: '☀️' });
+  if (stats.nightCount > 0) rows.push({ label: 'Nights', value: `${stats.nightCount}`, icon: '🌙' });
+
+  return (
+    <View style={[styles.sleepCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[styles.sleepCardTitle, { color: colors.text }]}>📊 This Week</Text>
+      <View style={styles.sleepGrid}>
+        {rows.map((row) => (
+          <View
+            key={row.label}
+            style={[styles.sleepStatRow, { backgroundColor: colors.background }]}
+          >
+            <Text style={styles.sleepStatIcon}>{row.icon}</Text>
+            <View style={styles.sleepStatContent}>
+              <Text style={[styles.sleepStatValue, { color: colors.text }]}>
+                {row.value}
+              </Text>
+              <Text style={[styles.sleepStatLabel, { color: colors.textSecondary }]}>
+                {row.label}
+              </Text>
+            </View>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -724,19 +915,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
   },
-  diaperStatsRow: {
-    flexDirection: 'row',
+  diaperGrid: {
+    flexDirection: 'column',
     gap: 10,
   },
-  diaperStatItem: {
-    flex: 1,
+  diaperStatRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 14,
     padding: 14,
-    gap: 4,
+    gap: 12,
   },
-  diaperStatEmoji: {
+  diaperStatIcon: {
     fontSize: 24,
+  },
+  diaperStatContent: {
+    flex: 1,
   },
   diaperStatValue: {
     fontSize: 22,
@@ -830,5 +1024,53 @@ const styles = StyleSheet.create({
   weekSubStat: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  // ─── Sleep styles ──────────────────────────────────────
+  sleepCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sleepCardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  sleepCardEmpty: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  sleepGrid: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  sleepStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+  },
+  sleepStatIcon: {
+    fontSize: 24,
+  },
+  sleepStatContent: {
+    flex: 1,
+  },
+  sleepStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sleepStatLabel: {
+    fontSize: 12,
+    marginTop: 2,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+  },
+  sleepTapHint: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

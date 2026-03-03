@@ -96,6 +96,22 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
     CREATE INDEX IF NOT EXISTS idx_growth_baby_id ON growth_records(baby_id);
     CREATE INDEX IF NOT EXISTS idx_growth_date ON growth_records(date);
   `);
+  // ─── Sleep sessions table ──────────────────────────────
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS sleep_sessions (
+      id TEXT PRIMARY KEY NOT NULL,
+      baby_id TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT,
+      duration INTEGER,
+      sleep_type TEXT DEFAULT 'nap',
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (baby_id) REFERENCES babies(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_sleep_baby_id ON sleep_sessions(baby_id);
+    CREATE INDEX IF NOT EXISTS idx_sleep_start_time ON sleep_sessions(start_time);
+  `);
 }
 
 // ─── Baby CRUD ───────────────────────────────────────────────
@@ -483,4 +499,148 @@ export async function getLatestGrowthRecord(babyId: string): Promise<any | null>
 export async function deleteGrowthRecord(id: string): Promise<void> {
   const database = await getDatabase();
   await database.runAsync('DELETE FROM growth_records WHERE id = ?', [id]);
+}
+
+// ─── Sleep Session CRUD ──────────────────────────────────────
+
+export async function insertSleepSession(
+  id: string,
+  babyId: string,
+  startTime: string,
+  sleepType: string = 'nap'
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO sleep_sessions (id, baby_id, start_time, sleep_type) VALUES (?, ?, ?, ?)',
+    [id, babyId, startTime, sleepType]
+  );
+}
+
+export async function endSleepSession(
+  id: string,
+  endTime: string,
+  duration: number
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE sleep_sessions SET end_time = ?, duration = ? WHERE id = ?',
+    [endTime, duration, id]
+  );
+}
+
+export async function updateSleepNote(
+  id: string,
+  note: string
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE sleep_sessions SET note = ? WHERE id = ?',
+    [note, id]
+  );
+}
+
+export async function deleteSleepSession(id: string): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM sleep_sessions WHERE id = ?', [id]);
+}
+
+export async function getActiveSleepSession(babyId: string): Promise<any | null> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT * FROM sleep_sessions
+     WHERE baby_id = ? AND end_time IS NULL
+     ORDER BY start_time DESC LIMIT 1`,
+    [babyId]
+  );
+}
+
+export async function getLastCompletedSleepSession(babyId: string): Promise<any | null> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT * FROM sleep_sessions
+     WHERE baby_id = ? AND end_time IS NOT NULL
+     ORDER BY start_time DESC LIMIT 1`,
+    [babyId]
+  );
+}
+
+export async function getSleepSessionsByBabyAndDate(
+  babyId: string,
+  date: string
+): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT * FROM sleep_sessions
+     WHERE baby_id = ? AND date(start_time, 'localtime') = ?
+     ORDER BY start_time DESC`,
+    [babyId, date]
+  );
+}
+
+export async function getSleepSessionsByBabyAndDateRange(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any[]> {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT * FROM sleep_sessions
+     WHERE baby_id = ?
+       AND date(start_time, 'localtime') >= ?
+       AND date(start_time, 'localtime') <= ?
+       AND end_time IS NOT NULL
+     ORDER BY start_time DESC`,
+    [babyId, startDate, endDate]
+  );
+}
+
+export async function getSleepDayStats(babyId: string, date: string): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       COUNT(*) as total_sleeps,
+       COALESCE(SUM(duration), 0) as total_duration,
+       COALESCE(MAX(duration), 0) as longest_sleep,
+       SUM(CASE WHEN sleep_type = 'nap' THEN 1 ELSE 0 END) as nap_count,
+       SUM(CASE WHEN sleep_type = 'night' THEN 1 ELSE 0 END) as night_count
+     FROM sleep_sessions
+     WHERE baby_id = ? AND date(start_time, 'localtime') = ? AND end_time IS NOT NULL`,
+    [babyId, date]
+  );
+}
+
+export async function getSleepWeekStats(
+  babyId: string,
+  startDate: string,
+  endDate: string
+): Promise<any> {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT
+       COUNT(*) as total_sleeps,
+       COALESCE(SUM(duration), 0) as total_duration,
+       COALESCE(MAX(duration), 0) as longest_sleep,
+       COALESCE(AVG(duration), 0) as avg_duration,
+       SUM(CASE WHEN sleep_type = 'nap' THEN 1 ELSE 0 END) as nap_count,
+       SUM(CASE WHEN sleep_type = 'night' THEN 1 ELSE 0 END) as night_count
+     FROM sleep_sessions
+     WHERE baby_id = ?
+       AND date(start_time, 'localtime') >= ?
+       AND date(start_time, 'localtime') <= ?
+       AND end_time IS NOT NULL`,
+    [babyId, startDate, endDate]
+  );
+}
+
+export async function getSleepMarkedDatesForBaby(
+  babyId: string,
+  yearMonth: string
+): Promise<string[]> {
+  const database = await getDatabase();
+  const rows: any[] = await database.getAllAsync(
+    `SELECT DISTINCT date(start_time, 'localtime') as date FROM sleep_sessions
+     WHERE baby_id = ? AND strftime('%Y-%m', start_time, 'localtime') = ?`,
+    [babyId, yearMonth]
+  );
+  return rows.map((r) => r.date);
 }

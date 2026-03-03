@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBaby } from '../contexts/BabyContext';
-import { getSessionsByBabyAndDateRange, getDiaperLogsByBabyAndDateRange } from '../database';
+import { getSessionsByBabyAndDateRange, getDiaperLogsByBabyAndDateRange, getSleepSessionsByBabyAndDateRange } from '../database';
 import { exportToCSV, exportToPDF } from '../utils/export';
-import { FeedingSession, DiaperLog } from '../types';
+import { FeedingSession, DiaperLog, SleepSession } from '../types';
 import { format, subDays } from 'date-fns';
 
 export default function ExportScreen() {
@@ -105,16 +105,33 @@ export default function ExportScreen() {
         createdAt: r.created_at,
       }));
 
-      if (sessions.length === 0 && diaperLogs.length === 0) {
-        Alert.alert('No Data', 'No feeding sessions or diaper changes found in the selected date range.');
+      // Fetch sleep sessions for the same date range
+      const sleepRows = await getSleepSessionsByBabyAndDateRange(
+        selectedBaby.id,
+        toISODate(startDate),
+        toISODate(endDate)
+      );
+      const sleepSessions: SleepSession[] = sleepRows.map((r: any) => ({
+        id: r.id,
+        babyId: r.baby_id,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        duration: r.duration,
+        sleepType: r.sleep_type,
+        note: r.note,
+        createdAt: r.created_at,
+      }));
+
+      if (sessions.length === 0 && diaperLogs.length === 0 && sleepSessions.length === 0) {
+        Alert.alert('No Data', 'No feeding, diaper, or sleep data found in the selected date range.');
         setLoading(null);
         return;
       }
 
       if (exportFormat === 'pdf') {
-        await exportToPDF(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
+        await exportToPDF(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs, sleepSessions);
       } else {
-        await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs);
+        await exportToCSV(sessions, selectedBaby.name, toISODate(startDate), toISODate(endDate), diaperLogs, sleepSessions);
       }
     } catch (err) {
       console.error('Export failed:', err);
@@ -153,11 +170,11 @@ export default function ExportScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>
-          📤 Export Feeding And Diaper Logs
+          📤 Export Baby Logs
         </Text>
 
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Export as a document for doctor visits or personal records.
+          Feeding, diaper, and sleep data — perfect for doctor visits.
         </Text>
 
         {/* Quick select buttons */}

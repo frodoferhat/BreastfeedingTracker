@@ -1,7 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { FeedingSession, DiaperLog } from '../types';
+import { FeedingSession, DiaperLog, SleepSession } from '../types';
 import { formatTime } from './time';
 import { format, parseISO } from 'date-fns';
 
@@ -23,6 +23,7 @@ export function generateReport(
   startDate: string,
   endDate: string,
   diaperLogs: DiaperLog[] = [],
+  sleepSessions: SleepSession[] = [],
   forPdf = false
 ): string {
   const start = safeParse(startDate);
@@ -128,6 +129,8 @@ export function generateReport(
 
     ${buildDiaperSection(diaperLogs, forPdf)}
 
+    ${buildSleepSection(sleepSessions, forPdf)}
+
     <p style="text-align:center;margin-top:${forPdf ? '8px' : '16px'};font-size:${forPdf ? '9px' : '12px'};color:#94A3B8">Exported on ${exportedAt}</p>
   </div>
 </body>
@@ -186,6 +189,74 @@ function buildDiaperSection(logs: DiaperLog[], forPdf = false): string {
     </div>`;
 }
 
+function buildSleepSection(sessions: SleepSession[], forPdf = false): string {
+  if (sessions.length === 0) return '';
+
+  const cellPd = forPdf ? '4px 8px' : '8px 16px';
+  const headPd = forPdf ? '6px 8px' : '10px 16px';
+  const fontSize = forPdf ? '11px' : '14px';
+
+  const rows = sessions.map((s, i) => {
+    const date = format(safeParse(s.startTime), 'dd-MM-yyyy');
+    const start = formatTime(s.startTime);
+    const end = s.endTime ? formatTime(s.endTime) : '\u2014';
+    const dur = toMMSS(s.duration);
+    const type = s.sleepType === 'night' ? '🌙 Night' : '☀️ Nap';
+    const rowBg = i % 2 === 0 ? '#FFFFFF' : '#F3F0FF';
+    const num = sessions.length - i;
+    return `<tr style="background:${rowBg}">
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center;color:#94A3B8;font-weight:600">${num}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0">${date}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center">${type}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0">${start}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0">${end}</td>
+      <td style="padding:${cellPd};border-bottom:1px solid #E2E8F0;text-align:center;font-weight:700;color:#6C5CE7">${dur}</td>
+    </tr>`;
+  });
+
+  // Summary
+  const totalSleeps = sessions.length;
+  const totalDur = sessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
+  const naps = sessions.filter(s => s.sleepType === 'nap').length;
+  const nights = sessions.filter(s => s.sleepType === 'night').length;
+  const avgDur = totalSleeps > 0 ? Math.round(totalDur / totalSleeps) : 0;
+
+  const summaryFontSize = forPdf ? '10px' : '13px';
+
+  return `
+    <div style="margin-top:${forPdf ? '16px' : '28px'};margin-bottom:8px">
+      <h3 style="margin:0 0 ${forPdf ? '8px' : '12px'} 0;font-size:${forPdf ? '14px' : '18px'};font-weight:700;color:#1E293B">😴 Sleep Sessions</h3>
+
+      <div style="display:flex;gap:${forPdf ? '8px' : '12px'};margin-bottom:${forPdf ? '8px' : '14px'};flex-wrap:wrap">
+        <span style="font-size:${summaryFontSize};color:#6C5CE7;font-weight:600">${totalSleeps} sleep${totalSleeps !== 1 ? 's' : ''}</span>
+        <span style="font-size:${summaryFontSize};color:#94A3B8">·</span>
+        <span style="font-size:${summaryFontSize};color:#475569">${toMMSS(totalDur)} total</span>
+        <span style="font-size:${summaryFontSize};color:#94A3B8">·</span>
+        <span style="font-size:${summaryFontSize};color:#475569">${toMMSS(avgDur)} avg</span>
+        ${naps > 0 ? `<span style="font-size:${summaryFontSize};color:#94A3B8">·</span><span style="font-size:${summaryFontSize};color:#F59E0B">☀️ ${naps} nap${naps !== 1 ? 's' : ''}</span>` : ''}
+        ${nights > 0 ? `<span style="font-size:${summaryFontSize};color:#94A3B8">·</span><span style="font-size:${summaryFontSize};color:#7C3AED">🌙 ${nights} night${nights !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+
+      <div style="background:white;border-radius:${forPdf ? '4px' : '10px'};overflow:hidden;border:1px solid #E2E8F0">
+        <table style="width:100%;border-collapse:collapse;font-size:${fontSize}">
+          <thead>
+            <tr style="background:#F5F3FF">
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">#</th>
+              <th style="padding:${headPd};text-align:left;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">Date</th>
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">Type</th>
+              <th style="padding:${headPd};text-align:left;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">Start</th>
+              <th style="padding:${headPd};text-align:left;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">End</th>
+              <th style="padding:${headPd};text-align:center;font-weight:700;color:#6C5CE7;border-bottom:2px solid #DDD6FE">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join('\n            ')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 /**
  * Export sessions as a styled HTML report and share
  */
@@ -194,15 +265,16 @@ export async function exportToCSV(
   babyName: string,
   startDate: string,
   endDate: string,
-  diaperLogs: DiaperLog[] = []
+  diaperLogs: DiaperLog[] = [],
+  sleepSessions: SleepSession[] = []
 ): Promise<void> {
-  const html = generateReport(sessions, babyName, startDate, endDate, diaperLogs);
+  const html = generateReport(sessions, babyName, startDate, endDate, diaperLogs, sleepSessions);
 
   const start = safeParse(startDate);
   const end = safeParse(endDate);
   const dateRange = `${format(start, 'd MMM')} - ${format(end, 'd MMM yyyy')}`;
   const capitalName = babyName.charAt(0).toUpperCase() + babyName.slice(1);
-  const fileName = `${capitalName} Feeding Log (${dateRange}).html`;
+  const fileName = `${capitalName} Baby Log (${dateRange}).html`;
   const file = new File(Paths.cache, fileName);
   file.create({ overwrite: true });
   file.write(html);
@@ -211,7 +283,7 @@ export async function exportToCSV(
   if (canShare) {
     await Sharing.shareAsync(file.uri, {
       mimeType: 'text/html',
-      dialogTitle: `Share feeding log for ${babyName}`,
+      dialogTitle: `Share baby log for ${babyName}`,
     });
   }
 }
@@ -224,9 +296,10 @@ export async function exportToPDF(
   babyName: string,
   startDate: string,
   endDate: string,
-  diaperLogs: DiaperLog[] = []
+  diaperLogs: DiaperLog[] = [],
+  sleepSessions: SleepSession[] = []
 ): Promise<void> {
-  const html = generateReport(sessions, babyName, startDate, endDate, diaperLogs, true);
+  const html = generateReport(sessions, babyName, startDate, endDate, diaperLogs, sleepSessions, true);
 
   // Generate PDF from HTML
   const { uri } = await Print.printToFileAsync({

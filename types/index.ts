@@ -128,6 +128,45 @@ export interface MarkedDates {
   [date: string]: MarkedDate;
 }
 
+// ─── Sleep ────────────────────────────────────────────────
+
+export type SleepType = 'nap' | 'night';
+
+export interface SleepSession {
+  id: string;
+  babyId: string;
+  startTime: string;   // ISO datetime (UTC)
+  endTime: string | null;
+  duration: number | null; // seconds, null if ongoing
+  sleepType: SleepType;    // auto-detected from start hour
+  note: string | null;
+  createdAt: string;
+}
+
+export interface SleepDayStats {
+  totalSleeps: number;
+  totalDuration: number;   // seconds
+  longestSleep: number;    // seconds
+  napCount: number;
+  nightCount: number;
+}
+
+export interface SleepWeekStats {
+  totalSleeps: number;
+  totalDuration: number;   // seconds
+  longestSleep: number;    // seconds
+  napCount: number;
+  nightCount: number;
+  avgPerDay: number;        // sleeps per day (rounded to 1 decimal)
+  avgDuration: number;      // average sleep duration in seconds
+}
+
+export interface LastSleepInfo {
+  endTime: string;
+  duration: number;
+  sleepType: SleepType;
+}
+
 export type ThemeMode = 'light' | 'dark';
 
 export interface ThemeColors {

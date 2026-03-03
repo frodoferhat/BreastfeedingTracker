@@ -69,6 +69,12 @@ function RootLayoutNav() {
             title: 'Baby Growth',
           }}
         />
+        <Stack.Screen
+          name="sleep"
+          options={{
+            title: 'Sleep Tracker',
+          }}
+        />
       </Stack>
     </>
   );

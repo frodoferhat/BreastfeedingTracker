@@ -26,7 +26,7 @@ import AddBabyModal from '../components/AddBabyModal';
 import AudioNoteRecorder from '../components/AudioNoteRecorder';
 import DiaperLogModal from '../components/DiaperLogModal';
 import { scheduleFeedingReminder } from '../utils/notifications';
-import { updateSessionAudioNote, updateSessionNote, getDayStats, getBottleDayStats, getDiaperDayStats } from '../database';
+import { updateSessionAudioNote, updateSessionNote, getDayStats, getBottleDayStats, getDiaperDayStats, getSleepDayStats } from '../database';
 import { getTodayDate, formatDurationHuman } from '../utils/time';
 
 const formatMM_SS = (s: number) => {
@@ -124,6 +124,8 @@ export default function HomeScreen() {
     diaperTotal: number;
     diaperPee: number;
     diaperPoop: number;
+    sleepCount: number;
+    sleepDuration: number;
   }
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
 
@@ -131,10 +133,11 @@ export default function HomeScreen() {
     if (!selectedBaby) { setTodaySummary(null); return; }
     try {
       const today = getTodayDate();
-      const [feedRow, bottleRow, diaperRow] = await Promise.all([
+      const [feedRow, bottleRow, diaperRow, sleepRow] = await Promise.all([
         getDayStats(selectedBaby.id, today),
         getBottleDayStats(selectedBaby.id, today),
         getDiaperDayStats(selectedBaby.id, today),
+        getSleepDayStats(selectedBaby.id, today),
       ]);
       setTodaySummary({
         totalFeedings: feedRow?.total_feedings ?? 0,
@@ -144,6 +147,8 @@ export default function HomeScreen() {
         diaperTotal: diaperRow?.total ?? 0,
         diaperPee: diaperRow?.total_pee ?? 0,
         diaperPoop: diaperRow?.total_poop ?? 0,
+        sleepCount: sleepRow?.total_sleeps ?? 0,
+        sleepDuration: sleepRow?.total_duration ?? 0,
       });
     } catch { setTodaySummary(null); }
   }, [selectedBaby]);
@@ -269,10 +274,10 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.push('/calendar')}
-          style={[styles.calendarButton, { backgroundColor: colors.surface }]}
+          style={[styles.headerPill, { backgroundColor: colors.surface }]}
         >
           <Text style={styles.headerIcon}>📅</Text>
-          <Text style={[styles.calendarButtonText, { color: colors.text }]}>Dates & Feeding Logs</Text>
+          <Text style={[styles.headerPillText, { color: colors.text }]}>Calendar</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -280,15 +285,23 @@ export default function HomeScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setShowDiaper(true);
           }}
-          style={[styles.calendarButton, { backgroundColor: colors.surface }]}
+          style={[styles.headerPill, { backgroundColor: colors.surface }]}
         >
           <Text style={styles.headerIcon}>🧷</Text>
-          <Text style={[styles.calendarButtonText, { color: colors.text }]}>Diaper</Text>
+          <Text style={[styles.headerPillText, { color: colors.text }]}>Diaper</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push('/sleep')}
+          style={[styles.headerPill, { backgroundColor: '#6C5CE7' }]}
+        >
+          <Text style={styles.headerIcon}>😴</Text>
+          <Text style={[styles.headerPillText, { color: '#FFFFFF' }]}>Sleep</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={toggleTheme}
-          style={[styles.headerButton, { backgroundColor: colors.surface }]}
+          style={[styles.headerPill, { backgroundColor: colors.surface }]}
         >
           <Text style={styles.headerIcon}>
             {mode === 'light' ? '\uD83C\uDF19' : '\uD83C\uDF1E'}
@@ -449,6 +462,11 @@ export default function HomeScreen() {
                   {todaySummary.diaperTotal > 0 && (
                     <Text style={[styles.todayLine, { color: colors.textSecondary }]}>
                       {'\uD83E\uDDF7'} {todaySummary.diaperTotal} diapers ({'\uD83D\uDCA7'}{todaySummary.diaperPee}  {'\uD83D\uDCA9'}{todaySummary.diaperPoop})
+                    </Text>
+                  )}
+                  {todaySummary.sleepCount > 0 && (
+                    <Text style={[styles.todayLine, { color: colors.textSecondary }]}>
+                      😴 {todaySummary.sleepCount} sleep{todaySummary.sleepCount > 1 ? 's' : ''} · {formatDurationHuman(todaySummary.sleepDuration)}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -674,43 +692,33 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingTop: 8,
-    gap: 8,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  calendarButton: {
-    flexDirection: 'row',
-    height: 44,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingBottom: 4,
     gap: 6,
+  },
+  headerPill: {
+    flexDirection: 'row',
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  calendarButtonText: {
-    fontSize: 15,
+  headerPillText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   headerIcon: {
-    fontSize: 22,
+    fontSize: 18,
   },
   statusContainer: {
     alignItems: 'center',
