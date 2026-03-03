@@ -76,7 +76,25 @@ export default function BabySelector({
               onLongPress={() => handleLongPress(baby)}
               style={[
                 styles.chip,
-                { backgroundColor: chipBg, borderColor: chipBorder },
+                isSelected ? styles.chipSelected : styles.chipIdle,
+                {
+                  backgroundColor: chipBg,
+                  borderTopColor: isSelected
+                    ? 'rgba(255,255,255,0.3)'
+                    : 'rgba(255,255,255,0.7)',
+                  borderLeftColor: isSelected
+                    ? 'rgba(255,255,255,0.2)'
+                    : 'rgba(255,255,255,0.5)',
+                  borderBottomColor: isSelected
+                    ? 'rgba(0,0,0,0.25)'
+                    : 'rgba(0,0,0,0.12)',
+                  borderRightColor: isSelected
+                    ? 'rgba(0,0,0,0.15)'
+                    : 'rgba(0,0,0,0.08)',
+                  shadowColor: isSelected
+                    ? (genderStyle.selectedBg ?? colors.primary)
+                    : '#000',
+                },
               ]}
             >
               {isSelected && (
@@ -98,8 +116,16 @@ export default function BabySelector({
           onPress={onAddBaby}
           style={[
             styles.chip,
+            styles.chipIdle,
             styles.addChip,
-            { borderColor: colors.border, backgroundColor: colors.surface },
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: 'rgba(255,255,255,0.6)',
+              borderLeftColor: 'rgba(255,255,255,0.4)',
+              borderBottomColor: 'rgba(0,0,0,0.1)',
+              borderRightColor: 'rgba(0,0,0,0.06)',
+              shadowColor: '#000',
+            },
           ]}
         >
           <Text style={[styles.chipText, { color: colors.primary }]}>
@@ -126,8 +152,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 14,
     borderRadius: 24,
-    borderWidth: 1.5,
     gap: 6,
+  },
+  chipSelected: {
+    borderTopWidth: 2,
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 3,
+    borderRightWidth: 1.5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  chipIdle: {
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1,
+    borderBottomWidth: 2.5,
+    borderRightWidth: 1,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   chipEmoji: {
     fontSize: 18,
@@ -143,5 +188,6 @@ const styles = StyleSheet.create({
   },
   addChip: {
     borderStyle: 'dashed',
+    opacity: 0.8,
   },
 });
